@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* Açık tema (varsayılan) */
+body {
+    color: #212529;
+    background-color: #f8f9fa;
+  }
+  
+  /* Karanlık tema */
+  html[data-coreui-theme='dark'] body {
+    color: #f8f9fa;
+  }
+  
+  html[data-coreui-theme='dark'] .table {
+    color: #f8f9fa;
+  }
+  
+  html[data-coreui-theme='dark'] .table thead {
+    background-color: #1e1e1e;
+    color: #f8f9fa;
+  }
+  
+  html[data-coreui-theme='dark'] .table tbody tr {
+    border-color: #2c2c2c;
+  }
+  
+  html[data-coreui-theme='dark'] .btn {
+    color: #f8f9fa;
+  }
+  
+  html[data-coreui-theme='dark'] .btn-outline-secondary {
+    color: #f8f9fa;
+    border-color: #6c757d;
+  }
+  
+  html[data-coreui-theme='dark'] .alert {
+    background-color: hsl(0, 0%, 12%);
+    color: #f8f9fa;
+    border-color: #2c2c2c;
+  }
+  
+  html[data-coreui-theme='dark'] .badge {
+    color: #f8f9fa;
+  }
+  
+  html[data-coreui-theme='dark'] input.form-control,
+  html[data-coreui-theme='dark'] select.form-select {
+    background-color: #1e1e1e;
+    color: #f8f9fa;
+    border-color: #2c2c2c;
+  }
+  
+  html[data-coreui-theme='dark'] input::placeholder,
+  html[data-coreui-theme='dark'] select::placeholder {
+    color: #adb5bd;
+  }
+  

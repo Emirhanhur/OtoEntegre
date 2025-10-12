@@ -1,0 +1,7 @@
+{
+    "require": {
+        "guzzlehttp/guzzle": "^7.10",
+        "setasign/fpdi": "^2.6",
+        "setasign/tfpdf": "^1.33"
+    }
+}

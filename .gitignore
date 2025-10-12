@@ -1,0 +1,11 @@
+# Kök node_modules
+node_modules/
+
+# Frontend
+my-coreui-app/node_modules/
+my-coreui-app/dist/
+my-coreui-app/build/
+
+# Backend
+OtoEntegre.Api/bin/
+OtoEntegre.Api/obj/
