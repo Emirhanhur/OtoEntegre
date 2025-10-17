@@ -91,6 +91,23 @@ export default {
             } finally {
                 this.isLoading = false;
             }
+        },
+        async saveProductNote(urun) {
+            try {
+                const res = await api.post('/api/siparisler/update-product-note', {
+                    ProductId: urun.id,
+                    OrderId: this.order.id,
+                    Note: urun.siparisNotu
+                });
+                if (res.data.success) {
+                    this.$toast?.success("Ürün notu kaydedildi!");
+                } else {
+                    this.$toast?.error("Ürün notu kaydedilemedi!");
+                }
+            } catch (err) {
+                console.error("Ürün notu kaydedilemedi:", err);
+                this.$toast?.error("Ürün notu kaydedilemedi!");
+            }
         }
     },
     computed: {
@@ -142,7 +159,10 @@ export default {
                             <p><strong>Durum:</strong>
                                 <span class="badge" :class="statusClass(order.originalStatus)">{{ order.durum }}</span>
                             </p>
-                            <p><strong>Toplam Tutar:</strong> {{ formatMoney(order.toplamTutar) }} </p>
+                            <p><strong>Toplam Tutar:</strong>
+                                {{formatMoney(order?.siparisUrunleri?.reduce((sum, item) => sum + (item?.toplam_Fiyat
+                                    || 0), 0))}}
+                            </p>
                             <p><strong>Kargo Firması:</strong> {{ order.cargoProviderName }}</p>
                             <p><strong>Kargo Ücreti:</strong> {{ formatMoney(order.kargoUcreti) }}</p>
                             <p><strong>Kargo Takip No:</strong> {{ order.kargoTakipNumarasi }}</p>
@@ -169,6 +189,8 @@ export default {
                                 <th>Ürün Adı</th>
                                 <th>Adet</th>
                                 <th>Trendyol Kod</th>
+                                <th>Not</th> <!-- Yeni sütun -->
+
                             </tr>
                         </thead>
                         <tbody>
@@ -181,6 +203,10 @@ export default {
                                 <td>{{ urun.ad }}</td>
                                 <td>{{ urun.adet }}</td>
                                 <td>{{ urun.productCode }}</td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm" v-model="urun.siparisNotu"
+                                        @blur="saveProductNote(urun)" placeholder="Not ekle..." />
+                                </td>
                             </tr>
                         </tbody>
                     </table>

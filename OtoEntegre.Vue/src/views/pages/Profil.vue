@@ -27,9 +27,13 @@ export default {
             changingPassword: false,
             changeSuccess: false,
             changeError: ''
+            ,
+            kredi: null,
+            krediLoading: false
             // 🔑 Şifre değiştirme alanları
         };
     },
+
     async mounted() {
         const kullaniciId = localStorage.getItem('kullanici_id');
         if (!kullaniciId) return;
@@ -48,6 +52,17 @@ export default {
             this.entegrasyonlar = Array.isArray(entRes.data) ? entRes.data : (entRes.data ? [entRes.data] : []);
         } catch (e) {
             this.entegrasyonlar = [];
+        }
+
+        // kredi yüklemesi
+        try {
+            this.krediLoading = true;
+            const kredRes = await api.get(`api/krediler/${kullaniciId}`);
+            this.kredi = kredRes.data;
+        } catch (err) {
+            this.kredi = null;
+        } finally {
+            this.krediLoading = false;
         }
     },
     methods: {
@@ -70,17 +85,23 @@ export default {
                     telefon: this.editTelefon,
                     entegrasyon_Telefon: this.editEntegrasyonTelefon,
                     telegramUseSamePhone: false,
+                    telegram_Chat: this.user.telegram_Chat,
+                    telegram_Token: this.user.telegram_Token,
                     ...(rolId && { rolId })
                 };
                 await api.put(`api/users/${kullaniciId}`, payload);
                 this.user = { ...this.user, ...payload };
-                this.saveSuccess = true;
+                const toastEl = document.getElementById('successToast');
+                if (toastEl) {
+                    const toast = new bootstrap.Toast(toastEl);
+                    toast.show();
+                }
+
             } catch (e) {
                 console.error(e);
                 this.saveError = 'Güncelleme başarısız.';
             } finally {
                 this.saving = false;
-                setTimeout(() => { this.saveSuccess = false; }, 2000);
             }
         },
 
@@ -109,17 +130,34 @@ export default {
                     confirmPassword: this.confirmNewPassword
                 });
 
-                alert("Şifre başarıyla değiştirildi!");
                 this.oldPassword = '';
                 this.newPassword = '';
                 this.confirmNewPassword = '';
-                this.changeSuccess = true;
+                const toastEl = document.getElementById('successToast');
+                if (toastEl) {
+                    const toast = new bootstrap.Toast(toastEl);
+                    toast.show();
+                }
             } catch (err) {
                 console.error(err);
                 this.changeError = err.response?.data?.title || 'Şifre değiştirilemedi!';
                 alert(this.changeError);
             } finally {
                 this.changingPassword = false;
+            }
+        },
+
+        async addCredits(amount = 5) {
+            const kullaniciId = localStorage.getItem('kullanici_id');
+            if (!kullaniciId) return;
+            try {
+                await api.post(`api/krediler/${kullaniciId}/add?amount=${amount}`);
+                const kredRes = await api.get(`api/krediler/${kullaniciId}`);
+                this.kredi = kredRes.data;
+                alert('Kredi eklendi.');
+            } catch (err) {
+                console.error(err);
+                alert('Kredi ekleme sırasında hata oluştu.');
             }
         }
 
@@ -164,10 +202,39 @@ export default {
                         <button class="btn btn-success w-100" @click="updateUser" :disabled="saving">
                             {{ saving ? 'Kaydediliyor...' : 'Kaydet' }}
                         </button>
-                        <div v-if="saveSuccess" class="text-success mt-2">✅ Bilgiler güncellendi!</div>
+                        <!-- ✅ Sağ üst toast bildirimi -->
+                        <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+                            <div id="successToast" class="toast align-items-center text-bg-success border-0"
+                                role="alert" aria-live="assertive" aria-atomic="true">
+                                <div class="d-flex">
+                                    <div class="toast-body">
+                                        ✅ Bilgiler başarıyla güncellendi!
+                                    </div>
+                                    <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                                        data-bs-dismiss="toast" aria-label="Close"></button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div v-if="saveError" class="text-danger mt-2">{{ saveError }}</div>
                     </div>
                 </div>
+                <!-- Krediler Kartı 
+                    <div   class="col-md-6">
+                        <div class="card shadow-sm w-100 h-100">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0">Krediler</h5>
+                            </div>
+                            <div class="card-body">
+                                <div v-if="krediLoading">Krediler yükleniyor...</div>
+                                <div v-else>
+                                    <p><strong>Kalan Kredi:</strong> {{ kredi ? kredi.kalanKredi : '—' }}</p>
+                                    <p v-if="kredi && kredi.sonSatinAlim"><small>Son Satın Alım: {{ new Date(kredi.sonSatinAlim).toLocaleString() }}</small></p>
+                                    <button class="btn btn-primary" @click="addCredits(5)">+5 Kredi Yükle</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>-->
             </div>
 
             <!-- 🔑 Şifre Değiştirme Alanı -->

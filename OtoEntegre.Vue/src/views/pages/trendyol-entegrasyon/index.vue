@@ -185,7 +185,11 @@ export default {
             try {
                 const res = await api.post(`/api/entegrasyonlar/send-siparis-telegram/${orderId}`);
                 if (res.data.sent) {
-                    alert("Sipariş Mesaj olarak gönderildi!");
+                    const toastEl = document.getElementById('successToast');
+                    if (toastEl) {
+                        const toast = new bootstrap.Toast(toastEl);
+                        toast.show();
+                    }
                     this.loadOrders(this.selectedStatus);
                 } else {
                     alert("Gönderilemedi.");
@@ -271,8 +275,17 @@ export default {
         </div>
 
 
-        <div v-if="successMessage" class="alert alert-success" role="alert">
-            {{ successMessage }}
+        <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+            <div id="successToast" class="toast align-items-center text-bg-success border-0" role="alert"
+                aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ✅ Sipariş Telegrama gönderildi
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
+                        aria-label="Close"></button>
+                </div>
+            </div>
         </div>
 
         <!-- Loading -->

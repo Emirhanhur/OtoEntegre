@@ -45,7 +45,7 @@ export default {
     },
     async initSignalR() {
       this.connection = new signalR.HubConnectionBuilder()
-        .withUrl("http://localhost:5079/orderHub")
+        .withUrl("https://epanelapi.kamukey.com.tr/orderHub")
         .withAutomaticReconnect()
         .build();
 

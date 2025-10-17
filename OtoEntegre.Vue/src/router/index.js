@@ -302,6 +302,13 @@ const routes = [
         name: 'Profil',
         component: () => import('@/views/pages/Profil.vue'),
       }
+      ,
+      {
+        path: '/admin/kredi-yukle',
+        name: 'KrediYukle',
+        component: () => import('@/views/pages/admin/KrediYukle.vue'),
+        meta: { requiresAdmin: true }
+      }
     ],
   },
   {
@@ -357,6 +364,14 @@ router.beforeEach((to, from, next) => {
   // Diğer sayfalarda token yoksa login sayfasına yönlendir
   if (!token) {
     return next('/pages/login')
+  }
+
+  // Eğer rota admin yetkisi gerektiriyorsa, kullanıcının rolünü kontrol et
+  if (to.meta && to.meta.requiresAdmin) {
+    const rol = localStorage.getItem('rol')
+    if (rol !== 'Admin') {
+      return next('/pages/404')
+    }
   }
 
   next()

@@ -56,8 +56,14 @@ const AppSidebarNav = defineComponent({
     })
 
     const renderItem = (item) => {
+      // Hide admin-only items for non-admin users (client-side nav filter)
+      if (item.meta && item.meta.requiresAdmin) {
+        const rol = localStorage.getItem('rol')
+        if (rol !== 'Admin') return null
+      }
+
       if (item.items) {
-        return h(
+  return h(
           CNavGroup,
           {
             as: 'div',
