@@ -19,6 +19,8 @@ namespace OtoEntegre.Api.Data
         public DbSet<KullaniciRolleri> KullaniciRolleri { get; set; } // eklendi
         public DbSet<Dealer> Dealers { get; set; }  // <- Bu olmalı
         public DbSet<Dealer> Platformlar { get; set; }  // <- Bu olmalı
+    public DbSet<Krediler> Krediler { get; set; }
+        public DbSet<KrediIslemleri> KrediIslemleri { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -94,6 +96,34 @@ namespace OtoEntegre.Api.Data
               .HasForeignKey(e => e.Urun_Id)
               .OnDelete(DeleteBehavior.Cascade);
     });
+
+            // Krediler mapping
+            modelBuilder.Entity<Krediler>(entity =>
+            {
+                entity.ToTable("krediler");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.KullaniciId).HasColumnName("kullanici_id");
+                entity.Property(e => e.KalanKredi).HasColumnName("kalan_kredi");
+                entity.Property(e => e.SonSatinAlim).HasColumnName("son_satin_alim");
+            });
+
+            // KrediIslemleri mapping
+            modelBuilder.Entity<KrediIslemleri>(entity =>
+            {
+                entity.ToTable("kredi_islemleri");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.KullaniciId).HasColumnName("kullanici_id");
+                entity.Property(e => e.Miktar).HasColumnName("miktar");
+                entity.Property(e => e.Tip).HasColumnName("tip");
+                entity.Property(e => e.BalanceAfter).HasColumnName("balance_after");
+                entity.Property(e => e.Referans).HasColumnName("referans");
+                entity.Property(e => e.Aciklama).HasColumnName("aciklama");
+                entity.Property(e => e.Metadata).HasColumnName("metadata");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+                entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            });
 
 
         }

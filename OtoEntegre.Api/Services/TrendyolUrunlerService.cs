@@ -13,10 +13,16 @@ public class TrendyolService
         _httpClientFactory = httpClientFactory;
     }
 
-    public async Task<TrendyolProductResponse?> GetProductsAsync(long supplierId, string apiKey, string apiSecret, int page = 0, int size = 1000)
+    public async Task<TrendyolProductsResponse?> GetProductsAsync(long supplierId, string apiKey, string apiSecret, int page = 0, int size = 1000, string? search = null)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get,
-            $"https://apigw.trendyol.com/integration/product/sellers/{supplierId}/products?page={page}&size={size}");
+        var url = $"https://apigw.trendyol.com/integration/product/sellers/{supplierId}/products?page={page}&size={size}";
+
+        if (!string.IsNullOrEmpty(search))
+        {
+            url += $"&searchText={Uri.EscapeDataString(search)}"; // ✅ Doğru encoding
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
 
         var auth = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"{apiKey}:{apiSecret}"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", auth);
@@ -49,7 +55,9 @@ public class TrendyolService
         var json = await response.Content.ReadAsStringAsync();
         Console.WriteLine($"[TrendyolService] Response alındı, uzunluk: {json.Length}");
 
-        return JsonSerializer.Deserialize<TrendyolProductResponse>(json, new JsonSerializerOptions
+        // The API returns paging metadata (page/size/totalElements) and a content array.
+        // Deserialize into TrendyolProductsResponse (which contains paging info and content items).
+        return JsonSerializer.Deserialize<TrendyolProductsResponse>(json, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
@@ -65,11 +73,23 @@ public class TrendyolService
         while (hasMore)
         {
             var data = await GetProductsAsync(supplierId, apiKey, apiSecret, currentPage, pageSize);
-            if (data?.Content != null && data.Content.Any())
+            if (data?.content != null && data.content.Any())
             {
-                allProducts.AddRange(data.Content);
+                // map TrendyolProduct -> TrendyolProductDto
+                var mapped = data.content.Select(p => new TrendyolProductDto
+                {
+                    ProductCode = p.productCode,
+                    Barcode = p.id ?? string.Empty,
+                    Title = p.title ?? string.Empty,
+                    Quantity = p.quantity,
+                    SalePrice = p.salePrice,
+                    ProductMainId = p.id ?? string.Empty,
+                    Images = p.images?.Select(i => new TrendyolImageDto { Url = i.url }).ToList() ?? new List<TrendyolImageDto>()
+                }).ToList();
+
+                allProducts.AddRange(mapped);
                 currentPage++;
-                hasMore = data.Content.Count == pageSize; // son sayfa kontrolü
+                hasMore = data.content.Count == pageSize; // son sayfa kontrolü
             }
             else
             {
@@ -99,8 +119,8 @@ public class TrendyolService
 
         var response = await httpClient.GetAsync(url);
         var responseBody = await response.Content.ReadAsStringAsync();
-Console.WriteLine($"[TrendyolService] Barkodlar: {joinedBarcodes}");
-Console.WriteLine($"[TrendyolService] Response: {responseBody}");
+        Console.WriteLine($"[TrendyolService] Barkodlar: {joinedBarcodes}");
+        Console.WriteLine($"[TrendyolService] Response: {responseBody}");
 
         if (!response.IsSuccessStatusCode)
         {
@@ -143,42 +163,42 @@ Console.WriteLine($"[TrendyolService] Response: {responseBody}");
             PropertyNameCaseInsensitive = true
         });
     }
-  public async Task<List<TrendyolOrderPayload>> GetOrdersAsync(
-    long supplierId, string apiKey, string apiSecret,
-    DateTime? startDate = null, DateTime? endDate = null,
-    int page = 0, int size = 200)
-{
-    Console.WriteLine("getorderasync başladı");
-    var client = _httpClientFactory.CreateClient();
-
-    var auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{apiKey}:{apiSecret}"));
-    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", auth);
-    client.DefaultRequestHeaders.Add("User-Agent", "OtoEntegre/1.0");
-
-    var url = $"https://apigw.trendyol.com/integration/order/sellers/{supplierId}/orders?";
-    var queryParams = new List<string>();
-
-    if (startDate.HasValue)
-        queryParams.Add($"startDate={new DateTimeOffset(startDate.Value.ToUniversalTime()).ToUnixTimeMilliseconds()}");
-    if (endDate.HasValue)
-        queryParams.Add($"endDate={new DateTimeOffset(endDate.Value.ToUniversalTime()).ToUnixTimeMilliseconds()}");
-
-    url += string.Join("&", queryParams);
-
-    var response = await client.GetAsync(url);
-    var body = await response.Content.ReadAsStringAsync();
-
-    if (!response.IsSuccessStatusCode)
+    public async Task<List<TrendyolOrderPayload>> GetOrdersAsync(
+      long supplierId, string apiKey, string apiSecret,
+      DateTime? startDate = null, DateTime? endDate = null,
+      int page = 0, int size = 200)
     {
-        Console.WriteLine($"Orders API Hatası: {response.StatusCode} {body}");
-        return new List<TrendyolOrderPayload>();
+        Console.WriteLine("getorderasync başladı");
+        var client = _httpClientFactory.CreateClient();
+
+        var auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{apiKey}:{apiSecret}"));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", auth);
+        client.DefaultRequestHeaders.Add("User-Agent", "OtoEntegre/1.0");
+
+        var url = $"https://apigw.trendyol.com/integration/order/sellers/{supplierId}/orders?";
+        var queryParams = new List<string>();
+
+        if (startDate.HasValue)
+            queryParams.Add($"startDate={new DateTimeOffset(startDate.Value.ToUniversalTime()).ToUnixTimeMilliseconds()}");
+        if (endDate.HasValue)
+            queryParams.Add($"endDate={new DateTimeOffset(endDate.Value.ToUniversalTime()).ToUnixTimeMilliseconds()}");
+
+        url += string.Join("&", queryParams);
+
+        var response = await client.GetAsync(url);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"Orders API Hatası: {response.StatusCode} {body}");
+            return new List<TrendyolOrderPayload>();
+        }
+
+        var data = JsonSerializer.Deserialize<TrendyolOrdersResponse>(body,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        return data?.Content ?? new List<TrendyolOrderPayload>();
     }
-
-    var data = JsonSerializer.Deserialize<TrendyolOrdersResponse>(body,
-        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-    return data?.Content ?? new List<TrendyolOrderPayload>();
-}
 
 
 }
@@ -241,6 +261,8 @@ public class TrendyolProduct
     public string id { get; set; } = string.Empty;
     public long productCode { get; set; }
     public string title { get; set; } = string.Empty;
+    // Trendyol may return a human-readable category name for the product
+    public string categoryName { get; set; } = string.Empty;
     public int pimCategoryId { get; set; }
     public int quantity { get; set; }
     public decimal salePrice { get; set; }

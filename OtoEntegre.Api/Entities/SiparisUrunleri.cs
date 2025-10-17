@@ -3,8 +3,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace OtoEntegre.Api.Entities
 {
-        [Table("siparis_urunleri")]
-    
+    [Table("siparis_urunleri")]
+
     public class SiparisUrunleri
     {
         [Column("id")]
@@ -20,6 +20,8 @@ namespace OtoEntegre.Api.Entities
         [Column("toplam_fiyat")]
         public decimal Toplam_Fiyat { get; set; }
 
+        [Column("siparis_notu")]
+        public string? SiparisNotu { get; set; }
         public Siparisler Siparis { get; set; } = null!;
         public Urunler Urun { get; set; } = null!;
     }

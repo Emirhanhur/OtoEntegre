@@ -59,7 +59,8 @@ namespace OtoEntegre.Api.Services
             string beden,
             string kargoTakipNumarasi,
             string urunTrendyolKod,
-            IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, string StokKodu)> urunler,
+
+IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, string StokKodu, string SiparisNotu)> urunler,
             PdfLabelPositions? positions = null)
         {
             if (!File.Exists(templatePath))
@@ -110,14 +111,25 @@ namespace OtoEntegre.Api.Services
                                 File.Delete(tempPng);
                         }
                     }
+                   bool siparisNotuVarMi = urunler.Any(u =>
+    !string.IsNullOrWhiteSpace(u.SiparisNotu) && u.SiparisNotu != "-"
+);
+
+
 
                     // Ürün Tablosu
                     double y = pos.UrunBaslikY + 50;
                     double marginLeft = 15;
                     double tableWidth = page.Width - 2;
                     double rowHeight = pos.UrunSatirHeight;
-                    string[] headers = new[] { "Ürün Adı", "Adet", "Renk", "Beden", "Barkod", "Ürün Kodu" };
-                    double[] colWidths = new double[] { 155, 50, 60, 60, 140, 100 };
+                    string[] headers = siparisNotuVarMi
+     ? new[] { "Ürün Adı", "Adet", "Renk", "Beden", "Barkod", "Ürün Kodu", "Sipariş Notu" }
+     : new[] { "Ürün Adı", "Adet", "Renk", "Beden", "Barkod", "Ürün Kodu" };
+
+                    double[] colWidths = siparisNotuVarMi
+                        ? new double[] { 130, 30, 50, 50, 90, 80, 110 }
+                        : new double[] { 150, 40, 60, 60, 100, 100 };
+
                     double[] colX = new double[colWidths.Length];
                     colX[0] = marginLeft;
                     for (int i = 1; i < colWidths.Length; i++)
@@ -133,32 +145,94 @@ namespace OtoEntegre.Api.Services
 
                     foreach (var u in urunler)
                     {
-                        string[] cells = new[] { u.Ad, u.Adet.ToString(), u.Renk, u.Beden, u.Barkod, u.StokKodu };
+
+                       string[] cells = siparisNotuVarMi
+        ? new[] { u.Ad, u.Adet.ToString(), u.Renk, u.Beden, u.Barkod, u.StokKodu, (u.SiparisNotu == "-" ? "" : u.SiparisNotu) }
+        : new[] { u.Ad, u.Adet.ToString(), u.Renk, u.Beden, u.Barkod, u.StokKodu };
                         double cellPadding = 4;
                         double maxCellHeight = rowHeight;
+
                         var tfCell = new XTextFormatter(gfx);
 
-                        // Ürün Adı sütunu için dinamik yükseklik
-                        double textWidth = colWidths[0] - 4;
-                        double textHeight = gfx.MeasureString(u.Ad, font).Height;
-                        int lines = (int)Math.Ceiling(gfx.MeasureString(u.Ad, font).Width / textWidth);
-                        double dynamicHeight = lines * textHeight + cellPadding;
-                        if (dynamicHeight > maxCellHeight)
-                            maxCellHeight = dynamicHeight;
+                        // Satır yüksekliğini hesaplamak için
+                        for (int i = 0; i < cells.Length; i++)
+                        {
+                            double cellWidth = colWidths[i] - 4;
+                            double cellHeight = rowHeight;
 
+                            if (i == 0 || i == 6) // Ürün Adı veya Sipariş Notu
+                            {
+                                string text = cells[i];
+                                var words = text.Split(' ');
+                                var lines = new List<string>();
+                                string currentLine = "";
+
+                                foreach (var word in words)
+                                {
+                                    string testLine = string.IsNullOrEmpty(currentLine) ? word : currentLine + " " + word;
+                                    var size = gfx.MeasureString(testLine, font);
+                                    if (size.Width > cellWidth)
+                                    {
+                                        lines.Add(currentLine);
+                                        currentLine = word;
+                                    }
+                                    else
+                                    {
+                                        currentLine = testLine;
+                                    }
+                                }
+                                if (!string.IsNullOrEmpty(currentLine))
+                                    lines.Add(currentLine);
+
+                                cellHeight = lines.Count * gfx.MeasureString("A", font).Height + cellPadding;
+                                if (cellHeight > maxCellHeight)
+                                    maxCellHeight = cellHeight;
+                            }
+                        }
+
+                        // Hücreleri çiz
                         for (int i = 0; i < cells.Length; i++)
                         {
                             gfx.DrawRectangle(XPens.Gray, colX[i], y, colWidths[i], maxCellHeight);
                             var rect = new XRect(colX[i] + 2, y + 2, colWidths[i] - 4, maxCellHeight - 4);
-                            if (i == 0)
-                                tfCell.DrawString(cells[i], font, XBrushes.Black, rect, XStringFormats.TopLeft);
+
+                            if (i == 0 || i == 6)
+                            {
+                                string text = cells[i];
+                                var words = text.Split(' ');
+                                double lineHeight = gfx.MeasureString("A", font).Height;
+                                double drawY = y + 2;
+                                string currentLine = "";
+
+                                foreach (var word in words)
+                                {
+                                    string testLine = string.IsNullOrEmpty(currentLine) ? word : currentLine + " " + word;
+                                    if (gfx.MeasureString(testLine, font).Width > colWidths[i] - 4)
+                                    {
+                                        tfCell.DrawString(currentLine, font, XBrushes.Black, new XRect(colX[i] + 2, drawY, colWidths[i] - 4, lineHeight), XStringFormats.TopLeft);
+                                        drawY += lineHeight;
+                                        currentLine = word;
+                                    }
+                                    else
+                                    {
+                                        currentLine = testLine;
+                                    }
+                                }
+                                if (!string.IsNullOrEmpty(currentLine))
+                                    tfCell.DrawString(currentLine, font, XBrushes.Black, new XRect(colX[i] + 2, drawY, colWidths[i] - 4, lineHeight), XStringFormats.TopLeft);
+                            }
                             else
+                            {
                                 gfx.DrawString(cells[i], font, XBrushes.Black, rect, XStringFormats.Center);
+                            }
                         }
+
                         y += maxCellHeight;
                         if (y > page.Height - 40)
                             break;
                     }
+
+
                 }
                 document.Save(outputFile);
             }

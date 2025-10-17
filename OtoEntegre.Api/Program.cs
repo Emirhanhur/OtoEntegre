@@ -23,10 +23,10 @@ builder.Services.AddCors(options =>
                 "http://localhost:5000",
                 "https://localhost:5000",
                 "http://localhost:80",
-                "https://kordteknoloji.com",
-                "http://kordteknoloji.com",
-                "https://api.kordteknoloji.com",
-                "http://api.kordteknoloji.com")
+                "https://epanel.kamukey.com.tr",
+                "http://epanel.kamukey.com.tr",
+                "https://epanelapi.kamukey.com.tr",
+                "http://epanelapi.kamukey.com.tr")
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -42,6 +42,7 @@ builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepositor
 builder.Services.AddScoped<EntegrasyonService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<DealerService>();
+builder.Services.AddScoped<KredilerService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<OtoEntegre.Api.Services.OrderService>();
 builder.Services.AddScoped<TelegramService>();

@@ -62,49 +62,49 @@ namespace OtoEntegre.Api.Services
         }
 
         private async Task<string> GenerateJwtTokenAsync(KULLANICILAR user)
-{
-    var jwtKey = _configuration["Jwt:Key"];
-    if (string.IsNullOrEmpty(jwtKey))
-        throw new InvalidOperationException("Jwt:Key configuration missing!");
+        {
+            var jwtKey = _configuration["Jwt:Key"];
+            if (string.IsNullOrEmpty(jwtKey))
+                throw new InvalidOperationException("Jwt:Key configuration missing!");
 
-    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
-    var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-    // Kullanıcı rolleri asenkron şekilde alınıyor
-    var allUserRoles = await _userRoleRepository.GetAllAsync();
-    var userRoles = new List<string>();
+            // Kullanıcı rolleri asenkron şekilde alınıyor
+            var allUserRoles = await _userRoleRepository.GetAllAsync();
+            var userRoles = new List<string>();
 
-    foreach (var ur in allUserRoles.Where(r => r.KullaniciId == user.Id))
-    {
-        var rol = await _rolRepository.GetByIdAsync(ur.RolId);
-        if (rol != null)
-            userRoles.Add(rol.Ad);
-        else
-            userRoles.Add("RolBulunamadı");
-    }
+            foreach (var ur in allUserRoles.Where(r => r.KullaniciId == user.Id))
+            {
+                var rol = await _rolRepository.GetByIdAsync(ur.RolId);
+                if (rol != null)
+                    userRoles.Add(rol.Ad);
+                else
+                    userRoles.Add("RolBulunamadı");
+            }
 
-    var claims = new List<Claim>
+            var claims = new List<Claim>
     {
         new Claim("nameid", user.Id.ToString()),
         new Claim("name", user.Ad ?? string.Empty),
         new Claim("email", user.Email ?? string.Empty)
     };
 
-    foreach (var role in userRoles)
-    {
-        claims.Add(new Claim("role", role));
-    }
+            foreach (var role in userRoles)
+            {
+                claims.Add(new Claim("role", role));
+            }
 
-    var token = new JwtSecurityToken(
-        issuer: _configuration["Jwt:Issuer"],
-        audience: _configuration["Jwt:Audience"],
-        claims: claims,
-        expires: DateTime.UtcNow.AddDays(1),
-        signingCredentials: creds
-    );
+            var token = new JwtSecurityToken(
+                issuer: _configuration["Jwt:Issuer"],
+                audience: _configuration["Jwt:Audience"],
+                claims: claims,
+                expires: DateTime.UtcNow.AddDays(1),
+                signingCredentials: creds
+            );
 
-    return new JwtSecurityTokenHandler().WriteToken(token);
-}
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
 
         // Tüm kullanıcıları getir
         public async Task<IEnumerable<KullaniciDto>> GetAllAsync()
@@ -174,8 +174,9 @@ namespace OtoEntegre.Api.Services
             user.Telefon = useSame ? entegrasyonPhone : dto.Telefon;
             user.Entegrasyon_Telefon = entegrasyonPhone;
             user.Updated_At = DateTime.UtcNow;
-            user.Telegram_Chat = dto.Telegram_Chat;
-            user.Telegram_Token = dto.Telegram_Token;
+           user.Telegram_Chat = dto.Telegram_Chat ?? user.Telegram_Chat;
+user.Telegram_Token = dto.Telegram_Token ?? user.Telegram_Token;
+
 
             _userRepository.Update(user);
             await _userRepository.SaveAsync();
@@ -221,21 +222,21 @@ namespace OtoEntegre.Api.Services
             // BCrypt ile hashle
             return BCrypt.Net.BCrypt.HashPassword(password);
         }
-public async Task<bool> ChangePasswordAsync(Guid userId, string oldPassword, string newPassword)
-{
-    var user = await _userRepository.GetByIdAsync(userId);
-    if (user == null) return false;
+        public async Task<bool> ChangePasswordAsync(Guid userId, string oldPassword, string newPassword)
+        {
+            var user = await _userRepository.GetByIdAsync(userId);
+            if (user == null) return false;
 
-    if (!BCrypt.Net.BCrypt.Verify(oldPassword, user.Sifre_Hash))
-        return false;
+            if (!BCrypt.Net.BCrypt.Verify(oldPassword, user.Sifre_Hash))
+                return false;
 
-    user.Sifre_Hash = BCrypt.Net.BCrypt.HashPassword(newPassword);
-    user.Updated_At = DateTime.UtcNow;
+            user.Sifre_Hash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            user.Updated_At = DateTime.UtcNow;
 
-    _userRepository.Update(user);
-    await _userRepository.SaveAsync();
-    return true;
-}
+            _userRepository.Update(user);
+            await _userRepository.SaveAsync();
+            return true;
+        }
 
         private KullaniciDto MapToDto(KULLANICILAR user)
         {

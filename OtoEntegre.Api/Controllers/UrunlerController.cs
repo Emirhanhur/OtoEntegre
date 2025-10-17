@@ -4,24 +4,29 @@ using OtoEntegre.Api.Repositories;
 using OtoEntegre.Api.Services;
 using System.Text.Json;
 using System.Net;
+using OtoEntegre.Api.Data;
+using Microsoft.EntityFrameworkCore;
 namespace OtoEntegre.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
     public class UrunlerController : ControllerBase
     {
-        private readonly IGenericRepository<Urunler> _repo;
-        private readonly EntegrasyonService _entegrasyonService;
-        private readonly TrendyolService _trendyolService;
+    private readonly IGenericRepository<Urunler> _repo;
+    private readonly EntegrasyonService _entegrasyonService;
+    private readonly TrendyolService _trendyolService;
+    private readonly AppDbContext _dbContext;
 
         public UrunlerController(
             IGenericRepository<Urunler> repo,
             EntegrasyonService entegrasyonService,
-            TrendyolService trendyolService) // ekle)
+            TrendyolService trendyolService,
+            AppDbContext dbContext)
         {
             _repo = repo;
             _entegrasyonService = entegrasyonService;
             _trendyolService = trendyolService;
+            _dbContext = dbContext;
         }
 
         [HttpGet]
@@ -165,8 +170,10 @@ namespace OtoEntegre.Api.Controllers
             return Ok(new { imported = products.Count });
         }
 
+        
+
         [HttpGet("trendyol/{kullaniciId}")]
-        public async Task<IActionResult> GetTrendyolProducts(Guid kullaniciId, int page = 0, int size = 50)
+        public async Task<IActionResult> GetTrendyolProducts(Guid kullaniciId,string? search = null, int page = 0, int size = 50)
         {
             // Kullanıcının entegrasyonunu al
             var entegrasyon = (await _entegrasyonService.GetAllAsync())
@@ -180,37 +187,92 @@ namespace OtoEntegre.Api.Controllers
 
             var supplierId = entegrasyon.Seller_Id.Value;
 
+            // Fetch only the requested page from Trendyol (Trendyol API supports page & size)
             try
             {
-                using var client = new HttpClient();
-                var request = new HttpRequestMessage(HttpMethod.Get,
-                    $"https://apigw.trendyol.com/integration/product/sellers/{supplierId}/products");
+                var resp = await _trendyolService.GetProductsAsync(supplierId, entegrasyon.Api_Key, entegrasyon.Api_Secret, page, size,search);
 
-                // Basic Auth header
-                var auth = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"{entegrasyon.Api_Key}:{entegrasyon.Api_Secret}"));
-                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", auth);
+                if (resp == null)
+                    return StatusCode(502, "Trendyol API'den ürün yanıtı alınamadı.");
 
-                // User-Agent header (zorunlu olabilir)
-                request.Headers.Add("User-Agent", "MyAppIntegration/1.0");
-
-                var response = await client.SendAsync(request);
-
-                if (!response.IsSuccessStatusCode)
-                    return StatusCode((int)response.StatusCode, "Trendyol ürünleri çekilemedi.");
-
-                var json = await response.Content.ReadAsStringAsync();
-                var data = JsonSerializer.Deserialize<TrendyolProductResponse>(json, new JsonSerializerOptions
+                // Map TrendyolProduct -> shape expected by frontend
+                var mapped = resp.content.Select(p => new
                 {
-                    PropertyNameCaseInsensitive = true
-                });
+                    productCode = p.productCode,
+                    barcode = p.id ?? string.Empty,
+                    title = p.title,
+                    salePrice = p.salePrice,
+                    productUrl = string.Empty,
+                    // prefer the human-readable categoryName from Trendyol, fallback to pimCategoryId
+                    category = !string.IsNullOrEmpty(p.categoryName) ? p.categoryName : (p.pimCategoryId != 0 ? p.pimCategoryId.ToString() : string.Empty),
+                    images = (object[])(p.images?.Select(i => new { url = i.url }).ToArray() ?? Array.Empty<object>())
+                }).ToList();
 
-                var products = data?.Content ?? new List<TrendyolProductDto>();
-                return Ok(products);
+                return Ok(new
+                {
+                    total = resp.totalElements,
+                    page = resp.page,
+                    size = resp.size,
+                    data = mapped
+                });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, $"Trendyol ürünleri alınırken hata oluştu: {ex.Message}");
             }
+        }
+
+        // GET api/urunler/stats/{productCode}?kullaniciId={kullaniciId}
+        [HttpGet("stats/{productCode}")]
+        public async Task<IActionResult> GetProductStats(long productCode, [FromQuery] Guid kullaniciId)
+        {
+            try
+            {
+                var urun = await _dbContext.Urunler.FirstOrDefaultAsync(u => u.ProductCode == productCode);
+                if (urun == null)
+                {
+                    return NotFound(new { message = "Ürün bulunamadı" });
+                }
+
+                // Toplam satılan adet ve kaç siparişte geçtiğini hesapla
+                var query = from su in _dbContext.SiparisUrunleri
+                            join u in _dbContext.Urunler on su.Urun_Id equals u.Id
+                            join s in _dbContext.Siparisler on su.Siparis_Id equals s.Id
+                            where u.ProductCode == productCode
+                            select new { su.Adet, su.Toplam_Fiyat, s.KullaniciId, su.Siparis_Id };
+
+                if (kullaniciId != Guid.Empty)
+                {
+                    query = query.Where(x => x.KullaniciId == kullaniciId);
+                }
+
+                var totalSold = await query.SumAsync(x => (int?)x.Adet) ?? 0;
+                var orderCount = await query.Select(x => x.Siparis_Id).Distinct().CountAsync();
+
+                return Ok(new { productCode, urunId = urun.Id, totalSold, orderCount });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        // POST api/urunler/{productCode}/update-price
+        // Body: { "kullaniciId": "guid", "price": 123.45 }
+        [HttpPost("{productCode}/update-price")]
+        public async Task<IActionResult> UpdatePrice(long productCode, [FromBody] UpdatePriceRequest req)
+        {
+            // NOTE: This currently only logs the requested update. Persisting or updating Trendyol
+            // requires additional implementation. This endpoint acknowledges the request.
+            Console.WriteLine($"Price update requested: productCode={productCode}, price={req.Price}, kullaniciId={req.KullaniciId}");
+            // Optionally: find urun and update local record or call TrendyolService to update remote price.
+            return Ok(new { success = true });
+        }
+
+        public class UpdatePriceRequest
+        {
+            public Guid? KullaniciId { get; set; }
+            public decimal Price { get; set; }
         }
 
     }
