@@ -92,11 +92,15 @@ namespace OtoEntegre.Api.Entities
         [Column("musteri_adres")]
         public string MusteriAdres { get; set; } = string.Empty;
 
-         [Column("urun_trendyol_kod")]
+        [Column("urun_trendyol_kod")]
         public string UrunTrendyolKod { get; set; } = string.Empty;
 
+        [Column("cancelled_notified")]
+        public bool? CancelledNotified { get; set; } = false;
 
-
+public bool? DelayNotified { get; set; } = false;
+[NotMapped]
+    public int? SellerId { get; set; } 
     public ICollection<SiparisUrunleri> SiparisUrunleri { get; set; } = new List<SiparisUrunleri>();
 
 
