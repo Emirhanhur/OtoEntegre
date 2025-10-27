@@ -96,7 +96,30 @@ export default {
             } finally {
                 this.isLoading = false;
             }
-        }
+        },
+        statusClass(status) {
+            switch (status) { case 'DELIVERED': return 'bg-success text-white'; case 'CANCELLED': return 'bg-danger text-white'; case 'SHIPPED': return 'bg-primary text-white'; case 'CREATED': return 'bg-warning text-dark'; default: return 'bg-secondary text-white'; }
+        },
+        async changeCargoProvider() {
+            console.log(this.order)
+            if (!this.selectedCargo) {
+                this.$toast?.error("Lütfen kargo firması seçin!");
+                return;
+            }
+            this.isLoading = true;
+            try {
+                await api.put(`/api/Siparisler/siparisler/${this.order.paketNumarasi}/kargo-firmasi`, {
+                    cargoProvider: this.selectedCargo,
+                    entegrasyonId: this.order.entegrasyonId
+                });
+                this.$toast?.success("Kargo firması başarıyla değiştirildi!");
+            } catch (err) {
+                console.error(err);
+                this.$toast?.error("Kargo firması değiştirilemedi!");
+            } finally {
+                this.isLoading = false;
+            }
+        },
     }
 };
 </script>
@@ -111,16 +134,47 @@ export default {
                 </div>
 
                 <div class="modal-body" v-if="order">
+                    <div class="mb-3"> <label class="form-label fw-bold">Kargo Firması</label>
+                        <div class="input-group"> <select v-model="selectedCargo" class="form-select">
+                                <option disabled value="">Seçiniz...</option>
+                                <option v-for="opt in cargoOptions" :key="opt.value" :value="opt.value"> {{
+                                    opt.label }} </option>
+                            </select> <button class="btn btn-outline-primary d-flex align-items-center"
+                                @click="changeCargoProvider" :disabled="isLoading"> <span v-if="isLoading"
+                                    class="spinner-border spinner-border-sm me-2"></span> Değiştir </button> </div>
+                    </div> <!-- Sipariş Bilgileri -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h5>Sipariş Bilgileri</h5>
+                            <p><strong>Sipariş No:</strong> {{ order.siparisNumarasi }}</p>
+                            <p><strong>Durum:</strong> <span class="badge" :class="statusClass(order.originalStatus)">{{
+                                order.durum }}</span> </p>
+                            <p><strong>Toplam Tutar:</strong> {{formatMoney(order?.siparisUrunleri?.reduce((sum,
+                                item) => sum + (item?.toplam_Fiyat || 0), 0))}} </p>
+                            <p><strong>Kargo Firması:</strong> {{ order.cargoProviderName }}</p>
+                            <p><strong>Kargo Ücreti:</strong> {{ formatMoney(order.kargoUcreti) }}</p>
+                            <p><strong>Kargo Takip No:</strong> {{ order.kargoTakipNumarasi }}</p>
+                            <p><strong>Paket No:</strong> {{ order.paketNumarasi }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>Müşteri Bilgileri</h5>
+                            <p><strong>Ad Soyad:</strong> {{ order.musteriAdSoyad }}</p>
+                            <p><strong>Adres:</strong></p>
+                            <div class="p-2 border rounded" style="max-height: 100px; overflow-y: auto;"> {{
+                                order.musteriAdres }} </div>
+                            <p><strong>Beden:</strong> {{ order.beden || '-' }}</p>
+                            <p><strong>Renk:</strong> {{ order.renk || '-' }}</p>
+                        </div>
+                    </div>
                     <!-- Ürün Bilgileri -->
                     <h6>Ürün Bilgileri</h6>
                     <table class="table table-sm table-bordered align-middle">
                         <thead class="table-light">
                             <tr>
                                 <th>
-                                    <input type="checkbox"
-                                        @change="selectedProducts = $event.target.checked
-                                            ? SiparistekiUrunler.map(u => u.id)
-                                            : []">
+                                    <input type="checkbox" @change="selectedProducts = $event.target.checked
+                                        ? SiparistekiUrunler.map(u => u.id)
+                                        : []">
                                 </th>
                                 <th>Resim</th>
                                 <th>Ürün Adı</th>
@@ -132,8 +186,8 @@ export default {
                         <tbody>
                             <tr v-for="(urun, index) in SiparistekiUrunler" :key="index">
                                 <td><input type="checkbox" v-model="selectedProducts" :value="urun.id" /></td>
-                                <td><img :src="urun.image" v-if="urun.image"
-                                        style="max-width: 80px; max-height: 80px;"></td>
+                                <td><img :src="urun.image" v-if="urun.image" style="max-width: 80px; max-height: 80px;">
+                                </td>
                                 <td>{{ urun.ad }}</td>
                                 <td>{{ urun.adet }}</td>
                                 <td>{{ urun.productCode }}</td>
