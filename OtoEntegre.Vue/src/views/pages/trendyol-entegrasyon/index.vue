@@ -1,12 +1,15 @@
 <script>
 import { formatCurrency } from '../../../utils/format'
-import { Modal } from 'bootstrap';
 import SiparisDetayModal from './siparisDetayModal.vue';
+import OtostickerLoginModal from './OtostickerLoginModal.vue';
 import { nextTick } from 'vue';
 import api from "../../axios";
 
 export default {
-    components: { SiparisDetayModal },
+    components: {
+        SiparisDetayModal,
+        OtostickerLoginModal
+    },
     data() {
         return {
             orders: [],
@@ -17,6 +20,8 @@ export default {
             selectedOrders: [],
             selectedOrder: null,
             searchQuery: "", // 🔍 Arama inputu için
+            showOtostickerModal: false,
+            selectedOrderForOtosticker: null,
             selectedShippingCompany: "",
             successMessage: "", // ✅ alert için eklendi
 
@@ -93,6 +98,36 @@ export default {
         clearInterval(this.pollingInterval);
     },
     methods: {
+        async setPicking(order) {
+            console.log("İşleme alınıyor:", order);
+            if (!order.sellerId || !order.paketNumarasi) {
+                alert("SellerId veya PackageId eksik vue.");
+                return;
+            }
+
+            const payload = {
+                lines: order.siparisUrunleri.map(item => ({
+                    lineId: item.lineId,   // backend'den gelen lineId
+                    quantity: item.Adet
+                })),
+                params: {},
+                status: "Picking"
+            };
+
+            try {
+                const res = await api.put(`/api/Siparisler/trendyol/picking/${order.id}`, payload);
+                if (res.data.success) {
+                    alert("Sipariş Trendyol’da İşleme Alındı!");
+                    this.loadOrders(this.selectedStatus);
+                } else {
+                    alert("Hata oluştu: " + (res.data.error || "Bilinmeyen hata"));
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Hata oluştu.");
+            }
+        }
+        ,
         async loadOrders(durum = null) {
             try {
                 this.isLoading = true;
@@ -223,7 +258,10 @@ export default {
                 this.$refs.orderModal.showModal();
             }
         },
-
+        openOtostickerModal(order) {
+            this.selectedOrderForOtosticker = order;
+            this.showOtostickerModal = true;
+        },
         toggleSelectAll(event) {
             if (event.target.checked) {
                 this.selectedOrders = this.paginatedOrders.map(o => o.id);
@@ -231,6 +269,30 @@ export default {
                 this.selectedOrders = [];
             }
         },
+        getDelayStatus(order) {
+            const shippedStatuses = ["SHIPPED", "DELIVERED", "CANCELLED", "RETURNED", "INVOICED"];
+            if (shippedStatuses.includes(order.originalStatus)) return null;
+
+            const deliveryDate = order.estimatedDeliveryDate
+                ? new Date(order.estimatedDeliveryDate)
+                : new Date(new Date(order.createdAt).getTime() + 3 * 24 * 60 * 60 * 1000);
+
+            const now = new Date();
+            const diffMs = deliveryDate - now;
+
+            if (diffMs < 0) {
+                const diffDays = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60 * 24));
+                return { text: `Gecikti (${diffDays} gün)`, class: "badge bg-danger" };
+            } else {
+                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                return { text: `${diffDays} gün ${diffHours} saat ${diffMinutes} dakika kaldı`, class: "badge bg-success" };
+            }
+        }
+
+
+
 
     }
 };
@@ -310,6 +372,8 @@ export default {
                         <th>Kargo Firması</th>
                         <th>Durum</th>
                         <th>Tarih</th>
+                        <!-- <th>Gecikme Durumu</th> -->
+
                         <th>Toplam</th>
                         <th class="text-center">Mesaj Durumu</th>
                         <th class="text-center">#</th>
@@ -356,9 +420,17 @@ export default {
                             </span>
                         </td>
                         <td>{{ formatOrderDate(order.createdAt) }}</td>
+                        <!-- <td>
+                            <span v-if="getDelayStatus(order)" :class="getDelayStatus(order).class">
+                                {{ getDelayStatus(order).text }}
+                            </span>
+                            <span v-else>—</span> 
+                        </td> -->
                         <td>
                             {{order.siparisUrunleri.reduce((toplam, urun) => toplam + urun.toplam_Fiyat, 0).toFixed(2)}}
                         </td>
+
+
 
                         <td class="text-center">
                             <span v-if="order.telegramSent" class="text-success">
@@ -369,10 +441,25 @@ export default {
                             </button>
                         </td>
                         <td class="text-center">
-                            <button class="btn btn-outline-primary btn-sm" @click="openDetailModal(order)">
-                                <i class="bi bi-eye"></i>
-                            </button>
+                            <div class="d-flex flex-column gap-4 justify-content-center align-items-center h-100 w-100">
+                                <button class="btn btn-outline-primary btn-sm w-100" @click="openDetailModal(order)">
+                                    <i class="bi bi-eye"></i> Detay
+                                </button>
+
+                                <button v-if="order.durum" class="btn btn-sm w-100"
+                                    :class="{ 'btn-warning': order.originalStatus !== 'PICKING', 'btn-success': order.originalStatus === 'PICKING' }"
+                                    @click="setPicking(order)" :disabled="order.originalStatus === 'PICKING'">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                    {{ order.originalStatus === 'PICKING' ? 'İşleme Alındı' : 'İşleme Al' }}
+                                </button>
+                            </div>
                         </td>
+
+                        <!--  <button class="btn btn-success" @click="showOtostickerModal = true">
+                                Otosticker Login
+                            </button>-->
+
+
 
 
                     </tr>
@@ -400,11 +487,11 @@ export default {
                 Sonraki <i class="fas fa-chevron-right ms-1"></i>
             </button>
         </div>
-
         <SiparisDetayModal ref="orderModal" :order="selectedOrder" />
+        <OtostickerLoginModal :show="showOtostickerModal" @close="showOtostickerModal = false" />
     </div>
 </template>
-<style scoped>
+<style>
 /* Açık mod (varsayılan) */
 .btn-outline-primary {
     color: #1e1e1e;
