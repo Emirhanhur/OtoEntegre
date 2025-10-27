@@ -169,118 +169,148 @@ namespace OtoEntegre.Api.Controllers
         }
 
 
-        /*[HttpPost("trendyol-webhook")]
-         public async Task<IActionResult> TrendyolWebhook([FromBody] TrendyolOrderDto webhookOrder, [FromQuery] Guid kullaniciId)
-         {
-             Console.WriteLine("trendyol-webhook başladı");
-             if (webhookOrder == null) return BadRequest();
+        //         [HttpPost("trendyol-webhook")]
+        //          public async Task<IActionResult> TrendyolWebhook([FromBody] TrendyolOrderDto webhookOrder, [FromQuery] Guid kullaniciId)
+        //          {
+        //              Console.WriteLine("trendyol-webhook başladı");
+        //              if (webhookOrder == null) return BadRequest();
 
-             foreach (var line in webhookOrder.Lines)
-             {
-                 Console.WriteLine($"Ürün: {line.ProductId}");
-                 Console.WriteLine($"Adet: {line.Quantity}");
-                 Console.WriteLine($"Fiyat: {line.SalePrice}");
-                 Console.WriteLine($"resim: {line.Images}");
-                 Console.WriteLine("----------------------");
-             }
-             var kullanici = await _dbContext.Kullanicilar.FirstOrDefaultAsync(u => u.Id == kullaniciId);
-             if (kullanici == null) return BadRequest("Kullanıcı bulunamadı");
+        //              foreach (var line in webhookOrder.Lines)
+        //              {
+        //                  Console.WriteLine($"Ürün: {line.ProductId}");
+        //                  Console.WriteLine($"Adet: {line.Quantity}");
+        //                  Console.WriteLine($"Fiyat: {line.SalePrice}");
+        //                  Console.WriteLine($"resim: {line.Images}");
+        //                  Console.WriteLine("----------------------");
+        //              }
+        //              var kullanici = await _dbContext.Kullanicilar.FirstOrDefaultAsync(u => u.Id == kullaniciId);
+        //              if (kullanici == null) return BadRequest("Kullanıcı bulunamadı");
 
-             var entegrasyon = (await _entegrasyonService.GetAllAsync())
-                                 .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
-             if (entegrasyon == null) return BadRequest("Entegrasyon bulunamadı");
-
-
-             var siparis = new Siparisler
-             {
-                 Id = Guid.NewGuid(),
-                 SiparisNumarasi = webhookOrder.OrderNumber,
-                 ToplamTutar = webhookOrder.TotalPrice,
-                 Durum = webhookOrder.StatusEnum?.ToString() ?? webhookOrder.StatusRaw,
-                 CreatedAt = DateTimeOffset.FromUnixTimeMilliseconds(webhookOrder.OrderDate).UtcDateTime,
-                 UpdatedAt = DateTimeOffset.FromUnixTimeMilliseconds(webhookOrder.LastModifiedDate).UtcDateTime,
-                 TelegramSent = false,
-                 TedarikSent = false,
-                 TedarikKullaniciId = kullanici.Tedarik_Kullanici_Id,
-                 DealerId = (int)(entegrasyon.Seller_Id ?? 0),
-                 EntegrasyonId = entegrasyon.Id,
-                 KullaniciId = kullaniciId,
-                 // 🔽 EKLENMESİ GEREKENLER
-                 MusteriAdSoyad = $"{webhookOrder.CustomerFirstName} {webhookOrder.CustomerLastName}",
-                 MusteriAdres = webhookOrder.ShipmentAddress?.FullAddress ?? "",
-                 Beden = string.Join(",", webhookOrder.Lines.Select(l => l.ProductSize)),
-                 Renk = string.Join(",", webhookOrder.Lines.Select(l => l.MerchantSku)), // Renk bilgisi varsa burada
-                 PlatformUrunKod = string.Join(",", webhookOrder.Lines.Select(l => l.Barcode)), // barcode
-                 UrunTrendyolKod = string.Join(",", webhookOrder.Lines.Select(l => l.ProductCode)),
-                 KargoTakipNumarasi = webhookOrder.KargoTakipNumarasi.ToString(),
-                 PaketNumarasi = webhookOrder.PaketNumarasi.ToString()
-             };
+        //              var entegrasyon = (await _entegrasyonService.GetAllAsync())
+        //                                  .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
+        //              if (entegrasyon == null) return BadRequest("Entegrasyon bulunamadı");
 
 
-             await _repo.AddAsync(siparis);
-             await _repo.SaveAsync();
+        //              var siparis = new Siparisler
+        //              {
+        //                  Id = Guid.NewGuid(),
+        //                  SiparisNumarasi = webhookOrder.OrderNumber,
+        //                  ToplamTutar = webhookOrder.TotalPrice,
+        //                  Durum = webhookOrder.StatusEnum?.ToString() ?? webhookOrder.StatusRaw,
+        //                  CreatedAt = DateTimeOffset.FromUnixTimeMilliseconds(webhookOrder.OrderDate).UtcDateTime,
+        //                  UpdatedAt = DateTimeOffset.FromUnixTimeMilliseconds(webhookOrder.LastModifiedDate).UtcDateTime,
+        //                  TelegramSent = false,
+        //                  TedarikSent = false,
+        //                  TedarikKullaniciId = kullanici.Tedarik_Kullanici_Id,
+        //                  DealerId = (int)(entegrasyon.Seller_Id ?? 0),
+        //                  EntegrasyonId = entegrasyon.Id,
+        //                  KullaniciId = kullaniciId,
+        //                  // 🔽 EKLENMESİ GEREKENLER
+        //                  MusteriAdSoyad = $"{webhookOrder.CustomerFirstName} {webhookOrder.CustomerLastName}",
+        //                  MusteriAdres = webhookOrder.ShipmentAddress?.FullAddress ?? "",
+        //                  Beden = string.Join(",", webhookOrder.Lines.Select(l => l.ProductSize)),
+        //                  Renk = string.Join(",", webhookOrder.Lines.Select(l => l.MerchantSku)), // Renk bilgisi varsa burada
+        //                  PlatformUrunKod = string.Join(",", webhookOrder.Lines.Select(l => l.Barcode)), // barcode
+        //                  UrunTrendyolKod = string.Join(",", webhookOrder.Lines.Select(l => l.ProductCode)),
+        //                  KargoTakipNumarasi = webhookOrder.KargoTakipNumarasi.ToString(),
+        //                  PaketNumarasi = webhookOrder.PaketNumarasi.ToString()
+        //              };
+
+
+        //              await _repo.AddAsync(siparis);
+        //              await _repo.SaveAsync();
+
+        //              // ✅ SiparisUrunleri tablosuna ürünleri ekle
+        //              foreach (var line in webhookOrder.Lines)
+        //              {
+        //                  // Önce ürünü Urunler tablosuna ekle veya güncelle
+        //                  var urun = await _dbContext.Urunler.FirstOrDefaultAsync(u => u.ProductCode == long.Parse(line.ProductCode));
+        //                  if (urun == null)
+        //                  {
+        //                      urun = new Urunler
+        //                      {
+        //                          Id = Guid.NewGuid(),
+        //                          Ad = line.ProductName ?? "Bilinmeyen Ürün",
+        //                          ProductCode = long.Parse(line.ProductCode),
+        //                          Image = line.Images?.FirstOrDefault()?.ImagesUrl ?? "",
+        //                          Created_At = DateTime.UtcNow,
+        //                          Updated_At = DateTime.UtcNow
+        //                      };
+        //                      _dbContext.Urunler.Add(urun);
+        //                  }
+
+        //                  // SiparisUrunleri tablosuna ekle
+        //                  var siparisUrunu = new SiparisUrunleri
+        //                  {
+        //                      Id = Guid.NewGuid(),
+        //                      Siparis_Id = siparis.Id,
+        //                      Urun_Id = urun.Id,
+        //                      Adet = line.Quantity,
+        //                      Toplam_Fiyat = line.SalePrice * line.Quantity,
+        //                      Birim_Fiyat = line.SalePrice
+        //                  };
+        //                  _dbContext.SiparisUrunleri.Add(siparisUrunu);
+        //              }
+        //              await _dbContext.SaveChangesAsync();
+
+        //              // Ürünleri tedarikçi sitesine gönder
+        //              try
+        //              {
+        //                  var products = webhookOrder.Lines.Select(l => new OtostickerProductItemDto
+        //                  {
+        //                      Id = int.TryParse(l.ProductId, out var parsedId) ? parsedId : 0,  // fallback
+        //                      Price = l.SalePrice,
+        //                      Quantity = l.Quantity,
+        //                      Variant1 = "" // Trendyol ürün varyantı varsa buraya koyabilirsin
+        //                  }).ToList();
 
 
 
-             // Ürünleri tedarikçi sitesine gönder
-             try
-             {
-                 var products = webhookOrder.Lines.Select(l => new OtostickerProductItemDto
-                 {
-                     Id = int.TryParse(l.ProductId, out var parsedId) ? parsedId : 0,  // fallback
-                     Price = l.SalePrice,
-                     Quantity = l.Quantity,
-                     Variant1 = "" // Trendyol ürün varyantı varsa buraya koyabilirsin
-                 }).ToList();
+        //                  string message = $"Yeni Trendyol Siparişi:\n {webhookOrder.OrderNumber}\n" +
+        //                                   $"Tutar: {webhookOrder.TotalPrice} {webhookOrder.CurrencyCode}\n---------------------------------------";
+
+        //                  var firstImageUrl = webhookOrder.Lines?
+        //        .FirstOrDefault()?.Images?
+        //        .FirstOrDefault()?.ImagesUrl;
+
+        //                  bool telegramSent;
+        //                  if (!string.IsNullOrWhiteSpace(firstImageUrl))
+        //                  {
+        //                      telegramSent = await _telegramService.SendOrderMessageAsync(kullaniciId, message, firstImageUrl);
+        //                  }
+        //                  else
+        //                  {
+        //                      // Fotoğraf yok, sadece metin gönder
+        //  #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
+
+        //                      telegramSent = await _telegramService.SendOrderMessageAsync(kullaniciId, message, null);
+        //  #pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
+
+        //                  }
+        //                  siparis.TedarikSent = true;
+        //                  siparis.TelegramSent = telegramSent;
+        //                  await _repo.SaveAsync();
+
+        //                  // ✅ PDF oluşturma ve gönderme
+        //                  try
+        //                  {
+        //                      var result = await SendSiparisTelegram(siparis.Id);
+        //                      Console.WriteLine($"Telegram PDF gönderim sonucu: {result}");
+        //                  }
+        //                  catch (Exception ex)
+        //                  {
+        //                      Console.WriteLine($"SendSiparisTelegram çağrısı hata verdi: {ex}");
+        //                  }
+
+        //              }
+        //              catch (Exception ex)
+        //              {
+        //                  Console.WriteLine("Tedarikçi sipariş veya Telegram gönderim hatası: " + ex.Message);
+        //              }
 
 
-
-                 string message = $"Yeni Trendyol Siparişi:\n {webhookOrder.OrderNumber}\n" +
-                                  $"Tutar: {webhookOrder.TotalPrice} {webhookOrder.CurrencyCode}\n---------------------------------------";
-
-                 var firstImageUrl = webhookOrder.Lines?
-       .FirstOrDefault()?.Images?
-       .FirstOrDefault()?.ImagesUrl;
-
-                 bool telegramSent;
-                 if (!string.IsNullOrWhiteSpace(firstImageUrl))
-                 {
-                     telegramSent = await _telegramService.SendOrderMessageAsync(kullaniciId, message, firstImageUrl);
-                 }
-                 else
-                 {
-                     // Fotoğraf yok, sadece metin gönder
- #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
-
-                     telegramSent = await _telegramService.SendOrderMessageAsync(kullaniciId, message, null);
- #pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
-
-                 }
-                 siparis.TedarikSent = true;
-                 siparis.TelegramSent = telegramSent;
-                 await _repo.SaveAsync();
-
-                 // ✅ PDF oluşturma ve gönderme
-                 try
-                 {
-                     var result = await SendSiparisTelegram(siparis.Id);
-                     Console.WriteLine($"Telegram PDF gönderim sonucu: {result}");
-                 }
-                 catch (Exception ex)
-                 {
-                     Console.WriteLine($"SendSiparisTelegram çağrısı hata verdi: {ex}");
-                 }
-
-             }
-             catch (Exception ex)
-             {
-                 Console.WriteLine("Tedarikçi sipariş veya Telegram gönderim hatası: " + ex.Message);
-             }
-
-
-             return Ok(new { success = true });
-         }
- */
+        //              return Ok(new { success = true });
+        //          }
 
 
         [HttpPost("send-siparis-telegram/{orderId}")]
@@ -320,12 +350,14 @@ namespace OtoEntegre.Api.Controllers
                                            Image = u.Image ?? string.Empty,
                                            su.Adet,
                                            siparis.Renk,
-                                           siparis.Beden
+                                           siparis.Beden,
+                                           su.MerchantSku,
+                                           su.SiparisNotu
                                        }).Distinct().ToListAsync();
-
+        Console.WriteLine($"sipariş stok kodu = {string.Join(", ", urunlerDb.Select(u => u.MerchantSku))}");
 
                 // PDF tuple listesi
-                var pdfUrunler = urunlerDb
+            var pdfUrunler = urunlerDb
     .GroupBy(u => u.UrunId)
     .Select(g => g.First())
     .Select(u => (
@@ -335,11 +367,13 @@ namespace OtoEntegre.Api.Controllers
         Beden: string.IsNullOrWhiteSpace(u.Beden) ? "-" : u.Beden,
         Barkod: u.ProductCode?.ToString() ?? "-",
         StokKodu: u.ProductCode?.ToString() ?? "-",
+        MerchantSku: u.MerchantSku ?? "-", // ✅ yeni eklenen alan
         SiparisNotu: _dbContext.SiparisUrunleri
             .Where(x => x.Siparis_Id == siparis.Id && x.Urun_Id == u.UrunId)
             .Select(x => x.SiparisNotu)
             .FirstOrDefault() ?? "-"
     )).ToList();
+
 
 
 
@@ -366,20 +400,33 @@ namespace OtoEntegre.Api.Controllers
                 await _kredilerService.ConsumeOneAsync(guidKullanici);
 
                 // PDF şablon seçimi
-                string cargoFileName = siparis.CargoProviderName switch
-                {
-                    "Yurtiçi Kargo Marketplace" => "yurtici_ornekBarkod (2).pdf",
-                    "Trendyol Express Marketplace" => "tyexpress_ornekBarkod (2).pdf",
-                    "Sürat Kargo Marketplace" => "surat_ornekBarkod (2).pdf",
-                    "PTT Kargo Marketplace" => "ptt_ornekBarkod (2).pdf",
-                    "Kolay Gelsin Marketplace" => "kolaygelsin_ornekBarkod (2).pdf",
-                    "Horoz Kargo Marketplace" => "horoz_ornekBarkod (2).pdf",
-                    "DHL eCommerce Marketplace" => "dhl_ornekBarkod (2).pdf",
-                    "CEVA Marketplace" => "ceva_ornekBarkod (2).pdf",
-                    "Borusan Lojistik Marketplace" => "borusan_ornekBarkod (2).pdf",
-                    "Aras Kargo Marketplace" => "aras_ornekBarkod (2).pdf",
-                    _ => "ornekBarkod (2).pdf"
-                };
+               var cargoMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+{
+    { "Yurtiçi Kargo Marketplace", "yurtici_ornekBarkod (2).pdf" },
+    { "YKMP", "yurtici_ornekBarkod (2).pdf" },
+    { "Trendyol Express Marketplace", "tyexpress_ornekBarkod (2).pdf" },
+    { "TEXMP", "tyexpress_ornekBarkod (2).pdf" },
+    { "Sürat Kargo Marketplace", "surat_ornekBarkod (2).pdf" },
+    { "SURATMP", "surat_ornekBarkod (2).pdf" },
+    { "PTT Kargo Marketplace", "ptt_ornekBarkod (2).pdf" },
+    { "PTTMP", "ptt_ornekBarkod (2).pdf" },
+    { "Kolay Gelsin Marketplace", "kolaygelsin_ornekBarkod (2).pdf" },
+    { "KOLAYGELSINMP", "kolaygelsin_ornekBarkod (2).pdf" },
+    { "Horoz Kargo Marketplace", "horoz_ornekBarkod (2).pdf" },
+    { "HOROZMP", "horoz_ornekBarkod (2).pdf" },
+    { "DHL eCommerce Marketplace", "dhl_ornekBarkod (2).pdf" },
+    { "DHLECOMMP", "dhl_ornekBarkod (2).pdf" },
+    { "CEVA Marketplace", "ceva_ornekBarkod (2).pdf" },
+    { "CEVAMP", "ceva_ornekBarkod (2).pdf" },
+    { "Aras Kargo Marketplace", "aras_ornekBarkod (2).pdf" },
+    { "ARASMP", "aras_ornekBarkod (2).pdf" },
+    { "Borusan Lojistik Marketplace", "borusan_ornekBarkod (2).pdf" }
+};
+
+string cargoFileName = cargoMap.TryGetValue(siparis.CargoProviderName, out var fileName)
+    ? fileName
+    : "ornekBarkod (2).pdf";
+
 
                 var filenames = new[] { cargoFileName };
                 var basePaths = new[]
@@ -400,40 +447,51 @@ namespace OtoEntegre.Api.Controllers
                 var outputDir = Path.Combine(_env.ContentRootPath, "labels");
 
                 // PDF oluştur
-                var generatedPdf = await _pdfLabelService.GenerateFromTemplateAsync(
-                    template,
-                    outputDir,
-                    siparis.SiparisNumarasi ?? "-",
-                    siparis.MusteriAdSoyad,
-                    siparis.MusteriAdres,
-                    siparis.PlatformUrunKod ?? "-",
-                    siparis.Kod ?? siparis.SiparisNumarasi ?? "-",
-                    string.IsNullOrWhiteSpace(siparis.Renk) ? "-" : siparis.Renk,
-                    string.IsNullOrWhiteSpace(siparis.Beden) ? "-" : siparis.Beden,
-                    siparis.KargoTakipNumarasi ?? "-",
-                    siparis.UrunTrendyolKod ?? "-",
+var generatedPdf = await _pdfLabelService.GenerateFromTemplateAsync(
+    template,
+    outputDir,
+    siparis.SiparisNumarasi ?? "-",
+    siparis.MusteriAdSoyad,
+    siparis.MusteriAdres,
+    siparis.PlatformUrunKod ?? "-",
+    siparis.Kod ?? siparis.SiparisNumarasi ?? "-",
+    string.IsNullOrWhiteSpace(siparis.Renk) ? "-" : siparis.Renk,
+    string.IsNullOrWhiteSpace(siparis.Beden) ? "-" : siparis.Beden,
+    siparis.KargoTakipNumarasi ?? "-",
+    siparis.UrunTrendyolKod ?? "-",
+    pdfUrunler, // burada tuple içinde MerchantSku da var
+    new PdfLabelService.PdfLabelPositions
+    {
+        SiparisNoX = 98,
+        SiparisNoY = 276,
+        AdSoyadX = 98,
+        AdSoyadY = 308,
+        AdresX = 96,
+        AdresY = 330,
+        UrunBaslikX = 35,
+        UrunBaslikY = 400,
+        UrunSatirX = 35,
+        UrunSatirStartY = 420,
+        UrunSatirHeight = 14,
+        MaxUrunSatir = 10,
+        FontFamily = "Arial",
+        FontSize = 10,
+        FontBoldFamily = "Arial",
+        FontBoldSize = 11
+    }
+);
 
-                    pdfUrunler,
-                    new PdfLabelService.PdfLabelPositions
-                    {
-                        SiparisNoX = 98,
-                        SiparisNoY = 276,
-                        AdSoyadX = 98,
-                        AdSoyadY = 308,
-                        AdresX = 96,
-                        AdresY = 330,
-                        UrunBaslikX = 35,
-                        UrunBaslikY = 400,
-                        UrunSatirX = 35,
-                        UrunSatirStartY = 420,
-                        UrunSatirHeight = 14,
-                        MaxUrunSatir = 10,
-                        FontFamily = "Arial",
-                        FontSize = 10,
-                        FontBoldFamily = "Arial",
-                        FontBoldSize = 11
-                    }
-                );
+                // PDF gönderimi sonrası sipariş notu kontrolü
+                var urunNotlari = pdfUrunler
+                    .Where(u => !string.IsNullOrWhiteSpace(u.SiparisNotu) && u.SiparisNotu != "-")
+                    .Select(u => $"{u.Ad}: {u.SiparisNotu}")
+                    .ToList();
+
+                if (urunNotlari.Any())
+                {
+                    var notMesaji = "📝 *Sipariş Notları:*\n" + string.Join("\n", urunNotlari);
+                    await _telegramService.SendOrderMessageAsync(siparis.KullaniciId, notMesaji);
+                }
 
                 await _telegramService.SendDocumentAsync($"{siparis.MusteriAdSoyad}", generatedPdf, kullaniciId);
                 await _telegramService.SendOrderMessageAsync(siparis.KullaniciId, "-----------------");

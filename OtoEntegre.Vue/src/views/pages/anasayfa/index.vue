@@ -11,26 +11,39 @@ export default {
       currentPage: 0,
       pageSize: 10,
       totalOrders: 0,
+      totalAmount: 0,
       isLoading: false,
       showModal: false,
       selectedOrder: null,
       bayiId: localStorage.getItem("bayi_id"),
+      sortField: "createdAt",
+      sortDirection: "desc"
     };
   },
   computed: {
     totalPages() {
       return Math.ceil(this.totalOrders / this.pageSize);
     },
-    totalAmount() {
-      return this.orders.reduce((sum, order) => sum + (order.summary?.overall || 0), 0);
+    formattedTotalAmount() {
+      return this.formatCurrency(this.totalAmount);
     },
   },
   methods: {
+    async fetchTotalAmount() {
+      try {
+        const res = await api.get(
+          `api/siparisler/by-user/${this.bayiId}/total-amount`
+        );
+        this.totalAmount = res.data;
+      } catch (error) {
+        console.error("Toplam tutar alınamadı:", error);
+      }
+    },
     async fetchOrders() {
       try {
         this.isLoading = true;
         const res = await api.get(
-          `api/siparisler/by-user/${this.bayiId}?page=${this.currentPage}&pageSize=${this.pageSize}`
+          `api/siparisler/by-user/${this.bayiId}?page=${this.currentPage}&pageSize=${this.pageSize}&sort=${this.sortDirection}&sortBy=${this.sortField}`
         );
         this.orders = res.data;
 
@@ -50,7 +63,7 @@ export default {
       try {
         this.isLoading = true;
         const res = await api.get(
-          `api/siparisler/by-user/${this.bayiId}?page=${this.currentPage}&pageSize=${this.pageSize}`
+          `api/siparisler/by-user/${this.bayiId}?page=${this.currentPage}&pageSize=${this.pageSize}&sort=${this.sortDirection}&sortBy=${this.sortField}`
         );
         this.orders = res.data;
       } catch (error) {
@@ -97,9 +110,30 @@ export default {
       this.showModal = false;
       this.selectedOrder = null;
     },
+    sortBy(field) {
+      if (this.sortField === field) {
+        // Aynı alana tıklandığında yönü değiştir
+        this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        // Yeni alan seçildiğinde varsayılan olarak desc ile başla
+        this.sortField = field;
+        this.sortDirection = 'desc';
+      }
+      this.fetchOrdersOnly();
+    },
+    // Sıralama ikonlarını belirle
+    getSortIcon(field) {
+      if (this.sortField !== field) {
+        return 'bi-arrow-down-up text-muted';
+      }
+      return this.sortDirection === 'asc' ? 'bi-arrow-up text-primary' : 'bi-arrow-down text-primary';
+    },
   },
-  mounted() {
-    this.fetchOrders();
+  async mounted() {
+    await Promise.all([
+      this.fetchOrders(),
+      this.fetchTotalAmount()
+    ]);
   },
 };
 </script>
@@ -129,13 +163,28 @@ export default {
 
     <!-- Sipariş Tablosu -->
     <div v-else>
-      <div class="table-responsive rounded shadow">
-        <table class="table table-bordered table-hover">
+      <div class="table-responsive ">
+        <table class="table dark:table-dark table-bordered table-hover">
           <thead class="table-light">
             <tr>
-              <th>Sipariş No</th>
-              <th>Toplam Tutar</th>
-              <th>Tarih</th>
+              <th @click="sortBy('code')" class="cursor-pointer user-select-none">
+                <div class="d-flex align-items-center gap-2">
+                  Sipariş No
+                  <i :class="getSortIcon('code')" class="bi"></i>
+                </div>
+              </th>
+              <th @click="sortBy('overall')" class="cursor-pointer user-select-none">
+                <div class="d-flex align-items-center gap-2">
+                  Toplam Tutar
+                  <i :class="getSortIcon('overall')" class="bi"></i>
+                </div>
+              </th>
+              <th @click="sortBy('createdAt')" class="cursor-pointer user-select-none">
+                <div class="d-flex align-items-center gap-2">
+                  Tarih
+                  <i :class="getSortIcon('createdAt')" class="bi"></i>
+                </div>
+              </th>
               <th>Detay</th>
             </tr>
           </thead>
