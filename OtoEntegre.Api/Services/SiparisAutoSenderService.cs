@@ -59,7 +59,6 @@ namespace OtoEntegre.Api.Services
                                 {
                                     Date = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
                                     PaymentType = 2,
-                                    Status = "Created",
                                     Note = "Sipariş #" + siparis.SiparisNumarasi
                                 },
                                 Products = new System.Collections.Generic.List<OtostickerProductItemDto>

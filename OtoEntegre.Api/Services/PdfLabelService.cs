@@ -60,7 +60,7 @@ namespace OtoEntegre.Api.Services
             string kargoTakipNumarasi,
             string urunTrendyolKod,
 
-IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, string StokKodu, string SiparisNotu)> urunler,
+IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, string StokKodu, string MerchantSku, string SiparisNotu)> urunler,
             PdfLabelPositions? positions = null)
         {
             if (!File.Exists(templatePath))
@@ -111,24 +111,16 @@ IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, stri
                                 File.Delete(tempPng);
                         }
                     }
-                   bool siparisNotuVarMi = urunler.Any(u =>
-    !string.IsNullOrWhiteSpace(u.SiparisNotu) && u.SiparisNotu != "-"
-);
-
-
 
                     // Ürün Tablosu
                     double y = pos.UrunBaslikY + 50;
                     double marginLeft = 15;
                     double tableWidth = page.Width - 2;
                     double rowHeight = pos.UrunSatirHeight;
-                    string[] headers = siparisNotuVarMi
-     ? new[] { "Ürün Adı", "Adet", "Renk", "Beden", "Barkod", "Ürün Kodu", "Sipariş Notu" }
-     : new[] { "Ürün Adı", "Adet", "Renk", "Beden", "Barkod", "Ürün Kodu" };
+                    string[] headers = new[] { "Ürün Adı", "Adet", "Renk", "Beden", "Barkod", "Stok Kodu" };
 
-                    double[] colWidths = siparisNotuVarMi
-                        ? new double[] { 130, 30, 50, 50, 90, 80, 110 }
-                        : new double[] { 150, 40, 60, 60, 100, 100 };
+                    double[] colWidths = new double[] { 150, 40, 70, 60, 100, 130 };
+
 
                     double[] colX = new double[colWidths.Length];
                     colX[0] = marginLeft;
@@ -146,9 +138,8 @@ IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, stri
                     foreach (var u in urunler)
                     {
 
-                       string[] cells = siparisNotuVarMi
-        ? new[] { u.Ad, u.Adet.ToString(), u.Renk, u.Beden, u.Barkod, u.StokKodu, (u.SiparisNotu == "-" ? "" : u.SiparisNotu) }
-        : new[] { u.Ad, u.Adet.ToString(), u.Renk, u.Beden, u.Barkod, u.StokKodu };
+                        string[] cells = new[] { u.Ad, u.Adet.ToString(), u.Renk, u.Beden, u.Barkod, u.MerchantSku };
+
                         double cellPadding = 4;
                         double maxCellHeight = rowHeight;
 
@@ -160,7 +151,8 @@ IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, stri
                             double cellWidth = colWidths[i] - 4;
                             double cellHeight = rowHeight;
 
-                            if (i == 0 || i == 6) // Ürün Adı veya Sipariş Notu
+                            if (i == 0 || i == 5) // Ürün Adı veya Stok Kodu
+                                                  // Ürün Adı veya Sipariş Notu
                             {
                                 string text = cells[i];
                                 var words = text.Split(' ');
@@ -196,7 +188,8 @@ IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, stri
                             gfx.DrawRectangle(XPens.Gray, colX[i], y, colWidths[i], maxCellHeight);
                             var rect = new XRect(colX[i] + 2, y + 2, colWidths[i] - 4, maxCellHeight - 4);
 
-                            if (i == 0 || i == 6)
+                           if (i == 0 || i == 5)
+
                             {
                                 string text = cells[i];
                                 var words = text.Split(' ');
