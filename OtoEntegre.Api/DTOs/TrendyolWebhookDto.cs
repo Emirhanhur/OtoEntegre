@@ -227,6 +227,9 @@ public List<long>? OriginPackageIds { get; set; }
 
         [JsonPropertyName("lastModifiedDate")]
         public long LastModifiedDate { get; set; }
+        [JsonPropertyName("agreedDeliveryDate")]
+public long AgreedDeliveryDate { get; set; }
+
 
         [JsonPropertyName("commercial")]
         public bool Commercial { get; set; }
