@@ -12,10 +12,10 @@ namespace OtoEntegre.Api.Controllers
     [Route("api/[controller]")]
     public class UrunlerController : ControllerBase
     {
-    private readonly IGenericRepository<Urunler> _repo;
-    private readonly EntegrasyonService _entegrasyonService;
-    private readonly TrendyolService _trendyolService;
-    private readonly AppDbContext _dbContext;
+        private readonly IGenericRepository<Urunler> _repo;
+        private readonly EntegrasyonService _entegrasyonService;
+        private readonly TrendyolService _trendyolService;
+        private readonly AppDbContext _dbContext;
 
         public UrunlerController(
             IGenericRepository<Urunler> repo,
@@ -170,10 +170,10 @@ namespace OtoEntegre.Api.Controllers
             return Ok(new { imported = products.Count });
         }
 
-        
+
 
         [HttpGet("trendyol/{kullaniciId}")]
-        public async Task<IActionResult> GetTrendyolProducts(Guid kullaniciId,string? search = null, int page = 0, int size = 50)
+        public async Task<IActionResult> GetTrendyolProducts(Guid kullaniciId, string? search = null, int page = 0, int size = 50)
         {
             // Kullanıcının entegrasyonunu al
             var entegrasyon = (await _entegrasyonService.GetAllAsync())
@@ -190,7 +190,7 @@ namespace OtoEntegre.Api.Controllers
             // Fetch only the requested page from Trendyol (Trendyol API supports page & size)
             try
             {
-                var resp = await _trendyolService.GetProductsAsync(supplierId, entegrasyon.Api_Key, entegrasyon.Api_Secret, page, size,search);
+                var resp = await _trendyolService.GetProductsAsync(supplierId, entegrasyon.Api_Key, entegrasyon.Api_Secret, page, size, search);
 
                 if (resp == null)
                     return StatusCode(502, "Trendyol API'den ürün yanıtı alınamadı.");
@@ -222,34 +222,122 @@ namespace OtoEntegre.Api.Controllers
             }
         }
 
+        [HttpPost("trendyol-add")]
+        public async Task<IActionResult> AddProductToTrendyol([FromBody] TrendyolAddProductDto dto)
+        {
+            var entegrasyon = (await _entegrasyonService.GetAllAsync())
+                                .FirstOrDefault(e => e.Kullanici_Id.ToString() == dto.KullaniciId.ToString());
+            Console.WriteLine(entegrasyon?.Kullanici_Id + " - " + dto.KullaniciId);
+            if (entegrasyon == null)
+                return NotFound("Kullanıcının Trendyol entegrasyonu bulunamadı.");
+
+            if (!entegrasyon.Seller_Id.HasValue || string.IsNullOrEmpty(entegrasyon.Api_Key) || string.IsNullOrEmpty(entegrasyon.Api_Secret))
+                return BadRequest("Entegrasyon bilgileri eksik.");
+
+            if (dto.Variants == null || dto.Variants.Count == 0)
+                return BadRequest("En az bir varyant bilgisi gönderilmelidir.");
+
+            // Tek ürün - çok varyant (örnek: XL ve L)
+            var productPayload = new
+            {
+                items = dto.Variants.Select(v => new
+                {
+                    barcode = v.Barcode ?? Guid.NewGuid().ToString(),
+                    title = dto.Title,
+                    productMainId = dto.ProductMainId, // tüm varyantlarda aynı olmalı
+                    brandId = dto.BrandId,
+                    categoryId = dto.CategoryId,
+                    quantity = v.Stock > 0 ? v.Stock : 1,
+                    stockCode = v.StockCode ?? v.Barcode ?? Guid.NewGuid().ToString(),
+                    dimensionalWeight = 1.0m,
+                    description = v.Description ?? dto.Description ?? "",
+                    currencyType = "TRY",
+                    listPrice = Convert.ToDecimal(v.SalePrice),
+                    salePrice = Convert.ToDecimal(v.SalePrice),
+                    vatRate = 20,
+                    cargoCompanyId = 10,
+                    images = v.ImageUrls.Take(5).Select(url => new { url }).ToArray(),
+                    attributes = v.Attributes?.Select(a => new
+                    {
+                        attributeId = a.AttributeId,
+                        attributeValueId = a.AttributeValueId,
+                        customAttributeValue = a.CustomAttributeValue
+                    }).ToArray() ?? Array.Empty<object>()
+                }).ToArray()
+            };
+
+            Console.WriteLine(JsonSerializer.Serialize(productPayload, new JsonSerializerOptions { WriteIndented = true }));
+
+            var result = await _trendyolService.AddProductAsync(
+                entegrasyon.Seller_Id.Value,
+                entegrasyon.Api_Key,
+                entegrasyon.Api_Secret,
+                productPayload
+            );
+
+            if (!result.Success)
+                return StatusCode(500, $"Trendyol'a ürün eklenemedi: {result.Message}");
+
+            return Ok(new { message = "Ürün varyantları Trendyol hesabına başarıyla eklendi." });
+        }
+
+
+        public class TrendyolAddProductDto
+        {
+            public Guid KullaniciId { get; set; }
+            public string Title { get; set; } = "";
+            public string CategoryName { get; set; } = "";
+            public long CategoryId { get; set; }
+            public long BrandId { get; set; }
+            public string ProductMainId { get; set; } = "";
+            public string? Description { get; set; }
+
+            public List<VariantDto> Variants { get; set; } = new();
+
+            public class VariantDto
+            {
+                public string? Barcode { get; set; }
+                public string? StockCode { get; set; }
+                public decimal SalePrice { get; set; }
+                public int Stock { get; set; }
+                public string? Description { get; set; }
+                public List<string> ImageUrls { get; set; } = new();
+                public List<ProductAttributeDto> Attributes { get; set; } = new();
+            }
+
+            public class ProductAttributeDto
+            {
+                public int AttributeId { get; set; }
+                public int? AttributeValueId { get; set; }
+                public string? CustomAttributeValue { get; set; }
+            }
+        }
+
+
+
         // GET api/urunler/stats/{productCode}?kullaniciId={kullaniciId}
         [HttpGet("stats/{productCode}")]
         public async Task<IActionResult> GetProductStats(long productCode, [FromQuery] Guid kullaniciId)
         {
             try
             {
-                var urun = await _dbContext.Urunler.FirstOrDefaultAsync(u => u.ProductCode == productCode);
-                if (urun == null)
-                {
-                    return NotFound(new { message = "Ürün bulunamadı" });
-                }
+                // Kullanıcının Trendyol entegrasyonu
+                var entegrasyon = (await _entegrasyonService.GetAllAsync())
+                                    .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
 
-                // Toplam satılan adet ve kaç siparişte geçtiğini hesapla
-                var query = from su in _dbContext.SiparisUrunleri
-                            join u in _dbContext.Urunler on su.Urun_Id equals u.Id
-                            join s in _dbContext.Siparisler on su.Siparis_Id equals s.Id
-                            where u.ProductCode == productCode
-                            select new { su.Adet, su.Toplam_Fiyat, s.KullaniciId, su.Siparis_Id };
+                if (entegrasyon == null)
+                    return NotFound("Kullanıcının Trendyol entegrasyonu bulunamadı.");
 
-                if (kullaniciId != Guid.Empty)
-                {
-                    query = query.Where(x => x.KullaniciId == kullaniciId);
-                }
+                var supplierId = entegrasyon.Seller_Id.Value;
+                var apiKey = entegrasyon.Api_Key;
+                var apiSecret = entegrasyon.Api_Secret;
 
-                var totalSold = await query.SumAsync(x => (int?)x.Adet) ?? 0;
-                var orderCount = await query.Select(x => x.Siparis_Id).Distinct().CountAsync();
+                // Trendyol siparişlerini çek (son 90 gün gibi bir tarih aralığı koyabilirsin)
+                var orders = await _trendyolService.GetOrdersByProductCodeAsync(supplierId, apiKey, apiSecret, productCode);
+                // Sadece ilgili productCode'lu ürünleri filtrele
+              
 
-                return Ok(new { productCode, urunId = urun.Id, totalSold, orderCount });
+                return Ok(new { orders });
             }
             catch (Exception ex)
             {
