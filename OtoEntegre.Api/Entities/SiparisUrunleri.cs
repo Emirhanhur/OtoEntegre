@@ -21,8 +21,18 @@ namespace OtoEntegre.Api.Entities
         public decimal Toplam_Fiyat { get; set; }
 
         [Column("siparis_notu")]
+
+
         public string? SiparisNotu { get; set; }
+
+        [Column("line_id")]
+public long? LineId { get; set; }
+
         public Siparisler Siparis { get; set; } = null!;
         public Urunler Urun { get; set; } = null!;
+
+        [Column("merchant_sku")]
+        public string? MerchantSku { get; set; }
+
     }
 }
