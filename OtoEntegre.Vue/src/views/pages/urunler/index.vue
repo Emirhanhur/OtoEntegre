@@ -3,11 +3,20 @@ import { formatCurrency } from '../../../utils/format'
 import { Modal } from 'bootstrap';
 import { nextTick } from 'vue';
 import api from "../../axios";
+import AddProductModal from './addProductModal.vue';
+import AddVariantProductModal from './addVariantProductModal.vue';
+import BulkUploadModal from './BulkUploadModal.vue';
 
 export default {
+    components: {
+        AddProductModal,
+        AddVariantProductModal,
+        BulkUploadModal
+    },
     data() {
         return {
             products: [], // Trendyol ürünleri
+            selectedCategory: null, // artık ID tutacak
             productsTotal: 0,
             productsPage: 0,
             productsSize: 20,
@@ -27,11 +36,38 @@ export default {
             modalPrice: 0,
             modalStats: null,
             _bsModalInstance: null,
+            newImageUrl: "",
 
+            newProduct: {
+                images: [],
+                title: "",
+                categoryName: "",
+                categoryId: null,
+                brandId: null,
+                productMainId: null,
+                barcode: "",
+                salePrice: 0,
+                stock: 0,
+                description: "",
+                attributes: [
+                    { attributeId: 47, customAttributeValue: "Renk" },
+                    { attributeId: 348, attributeValueId: 686230 },
+                    { attributeId: 1155, attributeValueId: 1225104 },
+                    { attributeId: 346, attributeValueId: 4293 },
+                    { attributeId: 279, attributeValueId: 1256866 },
+                    { attributeId: 1156, attributeValueId: 1225110 },
+                    { attributeId: 91, attributeValueId: 10576981 },
+                    { attributeId: 343, attributeValueId: 4296 },
+                    { attributeId: 1192, attributeValueId: 10633877 },
+                    { attributeId: 767, attributeValueId: 10591493 }
+                ]
+            },
+            brands: [],
+            subCategories: [],
+            selectedAttributes: {},
+            successMessage: "",
+            _addModalInstance: null,
             // Category filter
-            selectedCategory: '',
-            categories: [],
-
             cargoOptions: [
                 { value: "YKMP", label: "Yurtiçi Kargo" },
                 { value: "ARASMP", label: "Aras Kargo" },
@@ -58,7 +94,22 @@ export default {
                 { key: 'UNPACKED', label: 'Pakete Çıktı', count: 0 },
                 { key: 'AT_COLLECTION_POINT', label: 'Teslimat Noktasında', count: 0 },
                 { key: 'VERIFIED', label: 'Doğrulandı', count: 0 }
-            ]
+            ],
+
+            categories: [],       // tüm kategori ağacı
+            categoryPath: [{ id: null }], // kategori seçim yolu
+            newProduct: {
+                categoryId: null, // son seçilen kategori (alt kategori)
+                title: "",
+                brandId: null,
+                salePrice: 0,
+                stock: 0,
+                description: "",
+                imageUrl: "",
+            },
+            categoryAttributes: [],
+            selectedAttributes: {},
+            successMessage: "",
         };
     },
     computed: {
@@ -95,6 +146,8 @@ export default {
         clearInterval(this.pollingInterval);
     },
     methods: {
+
+
         async loadTrendyolProducts(page = 0) {
             this.isLoading = true;
             const kullaniciId = localStorage.getItem("kullanici_id");
@@ -124,8 +177,10 @@ export default {
         formatMoney(amount, currency) {
             return formatCurrency(amount, currency);
         },
+
         // Product modal related methods
         async openProductModal(p) {
+            console.log('Opening product modal for', p);
             this.modalProduct = p;
             this.modalPrice = p.salePrice || 0;
             this.modalStats = null;
@@ -147,151 +202,183 @@ export default {
                 this._bsModalInstance = bsModal;
             }
         },
-        async closeProductModal() {
-            if (this._bsModalInstance) {
-                this._bsModalInstance.hide();
-                this._bsModalInstance = null;
-            }
-            this.modalProduct = null;
-            this.modalStats = null;
-        },
-        async savePrice() {
-            if (!this.modalProduct) return;
-            try {
-                const payload = { kullaniciId: localStorage.getItem('kullanici_id'), price: this.modalPrice };
-                await api.post(`api/urunler/${this.modalProduct.productCode}/update-price`, payload);
-                this.successMessage = 'Fiyat güncelleme isteği başarıyla gönderildi.';
-                // update local view
-                this.modalProduct.salePrice = this.modalPrice;
-            } catch (err) {
-                console.error('update price error', err);
-                this.successMessage = 'Fiyat güncelleme isteği başarısız.';
-            }
-        }
+
+
+
+
     }
 };
 </script>
 
 <template>
-    <div>
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Trendyol Ürünlerim</h2>
-            <div class="d-flex gap-2 align-items-center">
-                <!-- Category filter -->
-                <select v-model="selectedCategory" class="form-select">
-                    <option value="">Tümü</option>
+    <div class="container-fluid trendyol-page">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="fw-semibold mb-0">
+                <i class="bi bi-bag-check-fill text-primary me-2"></i> Trendyol Ürünlerim
+            </h3>
+
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <button class="btn btn-primary" @click="$refs.addProductModal.openModal()">Yeni Ürün</button>
+                <button class="btn btn-primary" @click="$refs.addVariantProductModal.openVariantModal()">
+                    Yeni Varyant Ürün
+                </button>
+                <button class="btn btn-success" @click="$refs.bulkUploadModal.openModal()">
+                    <i class="bi bi-file-earmark-excel me-1"></i> Excel ile Toplu Yükle
+                </button>
+
+
+                <select v-model="selectedCategory" class="form-select form-select-sm category-filter">
+                    <option value="">Tüm Kategoriler</option>
                     <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
                 </select>
-                <!-- 🔍 Arama Inputu -->
-                <input v-model="searchQuery" type="text" class="form-control" style="width:300px"
-                    placeholder="Sipariş no, müşteri adı veya ürün adı ara..." />
+
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input v-model="searchQuery" type="text" class="form-control shadow-sm"
+                        placeholder="Ürün adı veya SKU ara..." />
+                </div>
             </div>
         </div>
 
-        <!-- Trendyol Ürün Listesi -->
-        <div class="card mb-3">
+        <!-- Ürün Listesi -->
+        <div class="card shadow-sm border-0 rounded-4">
             <div class="card-body">
-                <h5 class="card-title">Trendyol Ürünleri</h5>
-
-                <div v-if="isLoading" class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
+                <div v-if="isLoading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted small">Ürünler yükleniyor...</p>
                 </div>
 
                 <div v-else>
-                    <div class="row g-3">
-                        <div class="col-6 col-md-3" v-for="p in filteredProducts" :key="p.productCode">
-                            <div class="card h-100">
-                                <img :src="(p.images && p.images.length > 0) ? p.images[0].url : p.productUrl"
-                                    class="card-img-top" style="height:140px;object-fit:contain;" />
-                                <div class="card-body p-2">
-                                    <h6 class="card-title" style="font-size:0.85rem;height:2.6rem;overflow:hidden;cursor:pointer"
-                                        @click="openProductModal(p)">
-                                        {{ p.title.length > 60 ? p.title.substring(0, 60) + '...' : p.title }}
-                                    </h6>
-
-                                    <p class="mb-0" style="font-size:0.9rem;font-weight:600">{{ formatMoney(p.salePrice,
-                                        'TRY') }}</p>
-                                    <p class="text-muted small mb-0">SKU: {{ p.productCode }}<br />Barkod: {{ p.barcode
-                                        || '—' }}</p>
+                    <div class="row g-4">
+                        <div class="col-6 col-md-3 col-lg-2" v-for="p in filteredProducts" :key="p.productCode">
+                            <div class="product-card" @click="openProductModal(p)">
+                                <div class="img-wrapper">
+                                    <img :src="(p.images?.length ? p.images[0].url : p.productUrl)" alt="product" />
+                                </div>
+                                <div class="p-2">
+                                    <h6 class="title">{{ p.title }}</h6>
+                                    <p class="price">{{ formatMoney(p.salePrice, 'TRY') }}</p>
+                                    <p class="small text-muted mb-0">SKU: {{ p.productCode }}</p>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="d-flex justify-content-center gap-2 mt-3">
-                        <button class="btn btn-outline-secondary" :disabled="productsPage === 0"
-                            @click="prevProductsPage">Önceki</button>
-                        <span class="align-self-center">Sayfa {{ productsPage + 1 }} / {{ Math.ceil(productsTotal /
-                            productsSize) || 1 }} ({{ productsTotal }})</span>
-                        <button class="btn btn-outline-secondary"
-                            :disabled="(productsPage + 1) * productsSize >= productsTotal"
-                            @click="nextProductsPage">Sonraki</button>
+                    <!-- Sayfalandırma -->
+                    <div class="d-flex justify-content-center align-items-center gap-3 mt-4">
+                        <button class="btn btn-outline-secondary btn-sm" :disabled="productsPage === 0"
+                            @click="prevProductsPage">
+                            <i class="bi bi-chevron-left"></i> Önceki
+                        </button>
+                        <span class="fw-medium small">
+                            Sayfa {{ productsPage + 1 }} / {{ Math.ceil(productsTotal / productsSize) || 1 }}
+                        </span>
+                        <button class="btn btn-outline-secondary btn-sm"
+                            :disabled="(productsPage + 1) * productsSize >= productsTotal" @click="nextProductsPage">
+                            Sonraki <i class="bi bi-chevron-right"></i>
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
 
+        <!-- Modals -->
+        <AddProductModal ref="addProductModal" />
+        <AddVariantProductModal ref="addVariantProductModal" />
+        <BulkUploadModal ref="bulkUploadModal" @upload-complete="loadTrendyolProducts" />
 
     </div>
-                <!-- Product Detail Modal -->
-                <div class="modal fade" id="productDetailModal" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog modal-lg modal-dialog-centered">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">Ürün Detayları</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div v-if="modalProduct">
-                                    <div class="row">
-                                        <div class="col-md-4">
-                                            <img :src="(modalProduct.images && modalProduct.images.length>0)?modalProduct.images[0].url:modalProduct.productUrl"
-                                                class="img-fluid" />
-                                        </div>
-                                        <div class="col-md-8">
-                                            <h5>{{ modalProduct.title }}</h5>
-                                            <p>SKU: {{ modalProduct.productCode }}</p>
-                                            <p>Satış Fiyatı: <strong>{{ formatMoney(modalProduct.salePrice,'TRY') }}</strong></p>
-                                            <div class="mb-3">
-                                                <label class="form-label">Yeni Fiyat</label>
-                                                <input type="number" step="0.01" class="form-control" v-model.number="modalPrice" />
-                                            </div>
-                                            <div v-if="modalStats">
-                                                <p>Toplam satılan adet: <strong>{{ modalStats.totalSold }}</strong></p>
-                                                <p>Geçen sipariş sayısı: <strong>{{ modalStats.orderCount }}</strong></p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
-                                <button type="button" class="btn btn-primary" @click="savePrice">Fiyatı Kaydet</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 </template>
+
 <style scoped>
-/* Açık mod (varsayılan) */
-.btn-outline-primary {
-    color: #1e1e1e;
-    border-color: #1e1e1e;
+.trendyol-page {
+    padding: 1rem 2rem;
+    background: #f8f9fb;
+    min-height: 100vh;
 }
 
-.btn-outline-primary .bi {
-    color: #1e1e1e;
+/* Search box */
+.search-box {
+    position: relative;
 }
 
-/* Karanlık mod */
-html[data-coreui-theme='dark'] .btn-outline-primary {
-    color: #1e1e1e;
-    border-color: #1e1e1e;
+.search-box i {
+    position: absolute;
+    top: 50%;
+    left: 12px;
+    transform: translateY(-50%);
+    color: #888;
 }
 
-html[data-coreui-theme='dark'] .btn-outline-primary .bi {
-    color: #1e1e1e;
+.search-box input {
+    padding-left: 36px;
+    min-width: 220px;
+    border-radius: 10px;
+}
+
+/* Category filter */
+.category-filter {
+    min-width: 180px;
+    border-radius: 10px;
+}
+
+/* Product card */
+.product-card {
+    border: 1px solid #eaeaea;
+    border-radius: 14px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.product-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+}
+
+.product-card .img-wrapper {
+    height: 140px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #f9f9f9;
+}
+
+.product-card img {
+    max-height: 100%;
+    width: auto;
+    object-fit: contain;
+}
+
+.product-card .title {
+    font-size: 0.85rem;
+    height: 2.6rem;
+    overflow: hidden;
+}
+
+.product-card .price {
+    font-weight: 600;
+    color: #ff7b00;
+    margin-bottom: 0;
+}
+
+/* Alert */
+.alert {
+    border-left: 4px solid #28a745;
+    font-weight: 500;
+}
+
+/* Fade animation */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
 }
 </style>
