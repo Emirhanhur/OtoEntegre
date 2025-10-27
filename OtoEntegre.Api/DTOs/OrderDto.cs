@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace OtoEntegre.Api.DTOs
 {
-   public class OrderDto
+    public class OrderDto
     {
         [JsonPropertyName("id")]
         public int Id { get; set; }
@@ -33,7 +33,7 @@ namespace OtoEntegre.Api.DTOs
         public string PaymentStatus { get; set; } = string.Empty;
         public DateTime? OrderDate { get; set; }
     }
-public enum OrderStatus
+    public enum OrderStatus
     {
         Unknown = 0,
         Created = 1,      // Yeni sipariş
@@ -105,9 +105,9 @@ public enum OrderStatus
     {
         public string Date { get; set; } = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         public int PaymentType { get; set; } = 2;
-        [JsonConverter(typeof(JsonStringEnumConverter))] // veya custom converter
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public OrderStatus Status { get; set; } = OrderStatus.Created;
 
-        public string Status { get; set; } = string.Empty;
         public string Note { get; set; } = "";
     }
 
