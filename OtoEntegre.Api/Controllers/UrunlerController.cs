@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OtoEntegre.Api.Entities;
 using OtoEntegre.Api.Repositories;
+using System.Text;
 using OtoEntegre.Api.Services;
 using System.Text.Json;
 using System.Net;
@@ -201,12 +202,30 @@ namespace OtoEntegre.Api.Controllers
                     productCode = p.productCode,
                     barcode = p.id ?? string.Empty,
                     title = p.title,
+                    description = p.description,
+                    brand = p.brand,
+                    brandId = p.brandId,
                     salePrice = p.salePrice,
-                    productUrl = string.Empty,
-                    // prefer the human-readable categoryName from Trendyol, fallback to pimCategoryId
+                    listPrice = p.listPrice,
+                    stock = p.quantity,
+                    onSale = p.onSale,
+                    approved = p.approved,
+                    archived = p.archived,
                     category = !string.IsNullOrEmpty(p.categoryName) ? p.categoryName : (p.pimCategoryId != 0 ? p.pimCategoryId.ToString() : string.Empty),
+                    productUrl = p.productUrl,
+                    createDateTime = p.createDateTime,
+                    lastUpdateDate = p.lastUpdateDate,
+                    attributes = p.attributes.Select(a => new
+                    {
+                        a.attributeId,
+                        a.attributeName,
+                        a.attributeValue,
+                        a.attributeValueId
+                    }),
                     images = (object[])(p.images?.Select(i => new { url = i.url }).ToArray() ?? Array.Empty<object>())
                 }).ToList();
+
+
 
                 return Ok(new
                 {
@@ -335,7 +354,7 @@ namespace OtoEntegre.Api.Controllers
                 // Trendyol siparişlerini çek (son 90 gün gibi bir tarih aralığı koyabilirsin)
                 var orders = await _trendyolService.GetOrdersByProductCodeAsync(supplierId, apiKey, apiSecret, productCode);
                 // Sadece ilgili productCode'lu ürünleri filtrele
-              
+
 
                 return Ok(new { orders });
             }
@@ -356,6 +375,63 @@ namespace OtoEntegre.Api.Controllers
             // Optionally: find urun and update local record or call TrendyolService to update remote price.
             return Ok(new { success = true });
         }
+
+
+    [HttpPost("trendyol/download-template/{categoryId}")]
+public IActionResult DownloadTrendyolTemplate(long categoryId, [FromBody] DownloadTemplateRequest request)
+{
+    var csv = new StringBuilder();
+
+    // Trendyol API'ye göre zorunlu + isteğe bağlı alanlar
+    var headers = new List<string>
+    {
+        "barcode (*)",
+        "title (*)",
+        "productMainId (*)",
+        "brandId (*)",
+        "categoryId (*)",
+        "quantity (*)",
+        "stockCode (*)",
+        "dimensionalWeight (*)",
+        "description (*)",
+        "currencyType (*)",
+        "listPrice (*)",
+        "salePrice (*)",
+        "cargoCompanyId (*)",
+        "vatRate (*)",
+        "deliveryDuration",
+        "deliveryOption",
+        "lotNumber",
+        "shipmentAddressId",
+        "returningAddressId",
+        "images (URL1, URL2, ...)",
+        "attributes (attributeId:attributeValueId veya customAttributeValue)"
+    };
+
+    // Eğer kategoriye özel attribute başlıkları varsa ekle
+    if (request?.Columns?.Any() == true)
+    {
+        headers.AddRange(request.Columns.Select(c => c.Header));
+    }
+
+    // Başlık satırını oluştur
+    csv.AppendLine(string.Join(",", headers));
+
+    var bytes = Encoding.UTF8.GetBytes(csv.ToString());
+
+    return File(bytes, "text/csv", $"trendyol-urun-sablonu-{categoryId}.csv");
+}
+
+public class DownloadTemplateRequest
+{
+    public long CategoryId { get; set; }
+    public List<ColumnInfo> Columns { get; set; } = new();
+    public class ColumnInfo
+    {
+        public string Header { get; set; } = "";
+    }
+}
+
 
         public class UpdatePriceRequest
         {
