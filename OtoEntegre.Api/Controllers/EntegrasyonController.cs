@@ -354,25 +354,25 @@ namespace OtoEntegre.Api.Controllers
                                            su.MerchantSku,
                                            su.SiparisNotu
                                        }).Distinct().ToListAsync();
-        Console.WriteLine($"sipariş stok kodu = {string.Join(", ", urunlerDb.Select(u => u.MerchantSku))}");
+                Console.WriteLine($"sipariş stok kodu = {string.Join(", ", urunlerDb.Select(u => u.MerchantSku))}");
 
                 // PDF tuple listesi
-            var pdfUrunler = urunlerDb
-    .GroupBy(u => u.UrunId)
-    .Select(g => g.First())
-    .Select(u => (
-        Ad: u.Ad,
-        Adet: u.Adet,
-        Renk: string.IsNullOrWhiteSpace(u.Renk) ? "-" : u.Renk,
-        Beden: string.IsNullOrWhiteSpace(u.Beden) ? "-" : u.Beden,
-        Barkod: u.ProductCode?.ToString() ?? "-",
-        StokKodu: u.ProductCode?.ToString() ?? "-",
-        MerchantSku: u.MerchantSku ?? "-", // ✅ yeni eklenen alan
-        SiparisNotu: _dbContext.SiparisUrunleri
-            .Where(x => x.Siparis_Id == siparis.Id && x.Urun_Id == u.UrunId)
-            .Select(x => x.SiparisNotu)
-            .FirstOrDefault() ?? "-"
-    )).ToList();
+                var pdfUrunler = urunlerDb
+        .GroupBy(u => u.UrunId)
+        .Select(g => g.First())
+        .Select(u => (
+            Ad: u.Ad,
+            Adet: u.Adet,
+            Renk: string.IsNullOrWhiteSpace(u.Renk) ? "-" : u.Renk,
+            Beden: string.IsNullOrWhiteSpace(u.Beden) ? "-" : u.Beden,
+            Barkod: u.ProductCode?.ToString() ?? "-",
+            StokKodu: u.ProductCode?.ToString() ?? "-",
+            MerchantSku: u.MerchantSku ?? "-", 
+            SiparisNotu: _dbContext.SiparisUrunleri
+                .Where(x => x.Siparis_Id == siparis.Id && x.Urun_Id == u.UrunId)
+                .Select(x => x.SiparisNotu)
+                .FirstOrDefault() ?? "-"
+        )).ToList();
 
 
 
@@ -380,27 +380,27 @@ namespace OtoEntegre.Api.Controllers
 
                 // Telegram mesajı
                 foreach (var urun in urunlerDb)
-{
+                {
                     var messageBuilder = new StringBuilder();
-    if(urun.Adet > 1)
-        messageBuilder.AppendLine($"{urun.Adet} adet");
-        
+                    if (urun.Adet > 1)
+                        messageBuilder.AppendLine($"{urun.Adet} adet");
 
-    var imageUrl = !string.IsNullOrWhiteSpace(urun.Image) 
-        ? urun.Image 
-        : "https://dummyimage.com/600x400/cccccc/000000&text=Sipariş+Resmi";
 
-    var sent = await _telegramService.SendOrderMessageAsync(guidKullanici, messageBuilder.ToString(), imageUrl);
+                    var imageUrl = !string.IsNullOrWhiteSpace(urun.Image)
+                        ? urun.Image
+                        : "https://dummyimage.com/600x400/cccccc/000000&text=Sipariş+Resmi";
 
-    if (!sent)
-        return StatusCode(500, new { sent = false, error = "Telegram gönderimi başarısız." });
-}
+                    var sent = await _telegramService.SendOrderMessageAsync(guidKullanici, messageBuilder.ToString(), imageUrl);
+
+                    if (!sent)
+                        return StatusCode(500, new { sent = false, error = "Telegram gönderimi başarısız." });
+                }
 
 
                 await _kredilerService.ConsumeOneAsync(guidKullanici);
 
                 // PDF şablon seçimi
-               var cargoMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                var cargoMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 {
     { "Yurtiçi Kargo Marketplace", "yurtici_ornekBarkod (2).pdf" },
     { "YKMP", "yurtici_ornekBarkod (2).pdf" },
@@ -423,9 +423,9 @@ namespace OtoEntegre.Api.Controllers
     { "Borusan Lojistik Marketplace", "borusan_ornekBarkod (2).pdf" }
 };
 
-string cargoFileName = cargoMap.TryGetValue(siparis.CargoProviderName, out var fileName)
-    ? fileName
-    : "ornekBarkod (2).pdf";
+                string cargoFileName = cargoMap.TryGetValue(siparis.CargoProviderName, out var fileName)
+                    ? fileName
+                    : "ornekBarkod (2).pdf";
 
 
                 var filenames = new[] { cargoFileName };
@@ -447,39 +447,39 @@ string cargoFileName = cargoMap.TryGetValue(siparis.CargoProviderName, out var f
                 var outputDir = Path.Combine(_env.ContentRootPath, "labels");
 
                 // PDF oluştur
-var generatedPdf = await _pdfLabelService.GenerateFromTemplateAsync(
-    template,
-    outputDir,
-    siparis.SiparisNumarasi ?? "-",
-    siparis.MusteriAdSoyad,
-    siparis.MusteriAdres,
-    siparis.PlatformUrunKod ?? "-",
-    siparis.Kod ?? siparis.SiparisNumarasi ?? "-",
-    string.IsNullOrWhiteSpace(siparis.Renk) ? "-" : siparis.Renk,
-    string.IsNullOrWhiteSpace(siparis.Beden) ? "-" : siparis.Beden,
-    siparis.KargoTakipNumarasi ?? "-",
-    siparis.UrunTrendyolKod ?? "-",
-    pdfUrunler, // burada tuple içinde MerchantSku da var
-    new PdfLabelService.PdfLabelPositions
-    {
-        SiparisNoX = 98,
-        SiparisNoY = 276,
-        AdSoyadX = 98,
-        AdSoyadY = 308,
-        AdresX = 96,
-        AdresY = 330,
-        UrunBaslikX = 35,
-        UrunBaslikY = 400,
-        UrunSatirX = 35,
-        UrunSatirStartY = 420,
-        UrunSatirHeight = 14,
-        MaxUrunSatir = 10,
-        FontFamily = "Arial",
-        FontSize = 10,
-        FontBoldFamily = "Arial",
-        FontBoldSize = 11
-    }
-);
+                var generatedPdf = await _pdfLabelService.GenerateFromTemplateAsync(
+                    template,
+                    outputDir,
+                    siparis.SiparisNumarasi ?? "-",
+                    siparis.MusteriAdSoyad,
+                    siparis.MusteriAdres,
+                    siparis.PlatformUrunKod ?? "-",
+                    siparis.Kod ?? siparis.SiparisNumarasi ?? "-",
+                    string.IsNullOrWhiteSpace(siparis.Renk) ? "-" : siparis.Renk,
+                    string.IsNullOrWhiteSpace(siparis.Beden) ? "-" : siparis.Beden,
+                    siparis.KargoTakipNumarasi ?? "-",
+                    siparis.UrunTrendyolKod ?? "-",
+                    pdfUrunler, // burada tuple içinde MerchantSku da var
+                    new PdfLabelService.PdfLabelPositions
+                    {
+                        SiparisNoX = 98,
+                        SiparisNoY = 276,
+                        AdSoyadX = 98,
+                        AdSoyadY = 308,
+                        AdresX = 96,
+                        AdresY = 330,
+                        UrunBaslikX = 35,
+                        UrunBaslikY = 400,
+                        UrunSatirX = 35,
+                        UrunSatirStartY = 420,
+                        UrunSatirHeight = 14,
+                        MaxUrunSatir = 10,
+                        FontFamily = "Arial",
+                        FontSize = 10,
+                        FontBoldFamily = "Arial",
+                        FontBoldSize = 11
+                    }
+                );
 
                 // PDF gönderimi sonrası sipariş notu kontrolü
                 var urunNotlari = pdfUrunler
