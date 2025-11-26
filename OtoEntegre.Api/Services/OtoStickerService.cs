@@ -14,10 +14,12 @@ namespace OtoEntegre.Api.Services
     public class OtostickerService
     {
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly TelegramService _telegramService;
 
-        public OtostickerService(IHttpClientFactory httpClientFactory)
+        public OtostickerService(IHttpClientFactory httpClientFactory, TelegramService telegramService)
         {
             _httpClientFactory = httpClientFactory;
+            _telegramService = telegramService;
         }
         public async Task<OtostickerFastSaleOrderResponse> CreateOrderAsync(string email, string password, OtostickerFastSaleOrderDto orderDto)
         {
@@ -89,26 +91,120 @@ namespace OtoEntegre.Api.Services
             public string ProductName { get; set; } = "";
         }
 
-        public async Task<string> CreateFastSaleAsync(object fastSaleRequest, OtostickerDealerDto dealer)
-{
-    var client = _httpClientFactory.CreateClient();
-    client.BaseAddress = new Uri("https://www.otosticker.com.tr");
-    client.DefaultRequestHeaders.Clear();
 
-    // eğer OtostickerDealerDto içinde apikey/apisecret yoksa sabit kullan
-    client.DefaultRequestHeaders.Add("apikey", "eba11f4b-2b1f-444e-a777-ec6872c95601");
-    client.DefaultRequestHeaders.Add("apisecret", "e81498b3f3865c5bd2a5b2a6ab69028e5RbSwX32Q3CMlAwUDg==");
+        // OtostickerService içine ekle
+        public async Task<OtoStickerProduct?> GetProductByBarcodeAsync(string barcode)
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri("https://www.otosticker.com.tr");
+            client.DefaultRequestHeaders.Clear();
+            client.DefaultRequestHeaders.Add("apikey", "eba11f4b-2b1f-444e-a777-ec6872c95601");
+            client.DefaultRequestHeaders.Add("apisecret", "e81498b3f3865c5bd2a5b2a6ab69028e5RbSwX32Q3CMlAwUDg==");
 
-    var json = JsonSerializer.Serialize(fastSaleRequest);
-    var content = new StringContent(json, Encoding.UTF8, "application/json");
-    var response = await client.PostAsync("/web_servis/order/fastSale", content);
-    var responseContent = await response.Content.ReadAsStringAsync();
+            var response = await client.GetAsync($"/api/v2/product/lists?barcode={barcode}");
+            var content = await response.Content.ReadAsStringAsync();
 
-    if (!response.IsSuccessStatusCode)
-        throw new Exception($"Otosticker Hatası: {response.StatusCode} - {responseContent}");
 
-    return responseContent;
-}
+            if (!response.IsSuccessStatusCode) return null;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(content);
+                var productEl = doc.RootElement.GetProperty("result").GetProperty("list")[0];
+
+                return new OtoStickerProduct
+                {
+                    ProductId = productEl.GetProperty("productId").GetString()!,
+                    SalePrice = productEl.GetProperty("salePrice").GetDecimal()
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("OtoSticker product parse hatası: " + ex.Message);
+                return null;
+            }
+        }
+
+        public class OtoStickerProduct
+        {
+            public string ProductId { get; set; } = null!;
+            public decimal SalePrice { get; set; }
+        }
+
+        public async Task<JsonDocument?> GetOrderListAsync(int dealerId)
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri("https://www.otosticker.com.tr");
+            client.DefaultRequestHeaders.Clear();
+
+            client.DefaultRequestHeaders.Add("apikey", "eba11f4b-2b1f-444e-a777-ec6872c95601");
+            client.DefaultRequestHeaders.Add("apisecret", "e81498b3f3865c5bd2a5b2a6ab69028e5RbSwX32Q3CMlAwUDg==");
+
+            var url = $"/api/v2/order/lists?pageStart=0&pageSize=10&orderBy=id&sort=desc&dealerId={dealerId}";
+
+            var response = await client.GetAsync(url);
+            var content = await response.Content.ReadAsStringAsync();
+
+            Console.WriteLine("=== OtoSticker Order List Response ===");
+            Console.WriteLine(content);
+            Console.WriteLine("=====================================");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"⚠️ OtoSticker sipariş listesi alınamadı: {response.StatusCode}");
+                return null;
+            }
+
+            try
+            {
+                return JsonDocument.Parse(content);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ OtoSticker sipariş listesi parse hatası: {ex.Message}");
+                return null;
+            }
+        }
+
+
+        public async Task<string> CreateFastSaleAsync(object fastSaleRequest, OtostickerDealerDto dealer, Guid kullaniciId)
+        {
+
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri("https://www.otosticker.com.tr");
+            client.DefaultRequestHeaders.Clear();
+
+            client.DefaultRequestHeaders.Add("apikey", "eba11f4b-2b1f-444e-a777-ec6872c95601");
+            client.DefaultRequestHeaders.Add("apisecret", "e81498b3f3865c5bd2a5b2a6ab69028e5RbSwX32Q3CMlAwUDg==");
+
+            // 🔹 JSON oluşturma
+            var json = JsonSerializer.Serialize(fastSaleRequest, new JsonSerializerOptions
+            {
+                WriteIndented = true // okunabilir hale getir
+            });
+
+            // 🔹 JSON’u konsola yaz
+            Console.WriteLine("=== OtoSticker Gönderilen JSON ===");
+            Console.WriteLine(json);
+            Console.WriteLine("===================================");
+
+            // 🔹 (isteğe bağlı) Telegram’a da log göndermek istersen:
+
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("/api/v2/order/fastSale", content);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            // 🔹 API cevabını da yaz
+            Console.WriteLine("=== OtoSticker Response ===");
+            Console.WriteLine(responseContent);
+            Console.WriteLine("===========================");
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception($"Otosticker Hatası: {response.StatusCode} - {responseContent}");
+
+            return responseContent;
+        }
+
 
 
         public async Task<OtostickerDealerListResponse?> GetDealerListAsync()
@@ -118,13 +214,45 @@ namespace OtoEntegre.Api.Services
             client.DefaultRequestHeaders.Clear();
             client.DefaultRequestHeaders.Add("apikey", "eba11f4b-2b1f-444e-a777-ec6872c95601");
             client.DefaultRequestHeaders.Add("apisecret", "e81498b3f3865c5bd2a5b2a6ab69028e5RbSwX32Q3CMlAwUDg==");
-            var response = await client.GetAsync("/api/v2/dealer/lists?pageStart=0&pageSize=500");
-            if (!response.IsSuccessStatusCode)
-                throw new Exception("Dealer listesi çekilemedi");
 
-            var json = await response.Content.ReadAsStringAsync();
-            return System.Text.Json.JsonSerializer.Deserialize<OtostickerDealerListResponse>(json);
+            int pageStart = 0;
+            int pageSize = 100; // Otosticker API’nin limiti büyük ihtimalle 100
+            var allDealers = new List<OtostickerDealerDto>();
+
+            while (true)
+            {
+                var response = await client.GetAsync($"/api/v2/dealer/lists?pageStart={pageStart}&pageSize={pageSize}");
+                if (!response.IsSuccessStatusCode)
+                    throw new Exception($"Dealer listesi çekilemedi (pageStart={pageStart})");
+
+                var json = await response.Content.ReadAsStringAsync();
+                var result = System.Text.Json.JsonSerializer.Deserialize<OtostickerDealerListResponse>(json);
+
+                if (result?.Result?.List == null || result.Result.List.Count == 0)
+                    break;
+
+                allDealers.AddRange(result.Result.List);
+
+                // Eğer dönen kayıt sayısı pageSize'dan azsa sayfa bitmiştir
+                if (result.Result.List.Count < pageSize)
+                    break;
+
+                pageStart++;
+            }
+
+            // Tüm sayfalardaki verileri tek response altında döndür
+            return new OtostickerDealerListResponse
+            {
+                Code = "200",
+                Result = new OtostickerDealerResult
+                {
+                    Total = allDealers.Count,
+                    PageSize = allDealers.Count,
+                    List = allDealers
+                }
+            };
         }
+
 
 
 
@@ -164,14 +292,42 @@ namespace OtoEntegre.Api.Services
             [JsonPropertyName("lastname")]
             public string Lastname { get; set; } = string.Empty;
 
+            [JsonPropertyName("code")]
+    public string Code { get; set; } = string.Empty; 
+
             [JsonPropertyName("title")]
             public string? Title { get; set; }
+
+            [JsonPropertyName("group")]
+            public string? Group { get; set; }
 
             [JsonPropertyName("status")]
             public int Status { get; set; }
 
             [JsonPropertyName("balance")]
             public decimal Balance { get; set; }
+
+            [JsonPropertyName("discount")]
+            public decimal Discount { get; set; }
+
+            [JsonPropertyName("nationalId")]
+            public string? NationalId { get; set; }
+
+            [JsonPropertyName("taxId")]
+            public string? TaxId { get; set; }
+
+            [JsonPropertyName("taxBranch")]
+            public string? TaxBranch { get; set; }
+
+            [JsonPropertyName("phone")]
+            public string? Phone { get; set; }
+
+            [JsonPropertyName("nBalanceStatus")]
+            public int? NBalanceStatus { get; set; }
+
+            [JsonPropertyName("nBalanceLimit")]
+            public int? NBalanceLimit { get; set; }
+
         }
 
 
@@ -433,6 +589,38 @@ namespace OtoEntegre.Api.Services
 
 
 
+        public async Task<decimal?> GetProductPriceAsync(string barcode)
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri($"https://www.otosticker.com.tr/api/v2/product/lists?");
+            client.DefaultRequestHeaders.Clear();
+            client.DefaultRequestHeaders.Add("apikey", "eba11f4b-2b1f-444e-a777-ec6872c95601");
+            client.DefaultRequestHeaders.Add("apisecret", "e81498b3f3865c5bd2a5b2a6ab69028e5RbSwX32Q3CMlAwUDg==");
+            client.DefaultRequestHeaders.Add("Cookie", "ecom_orcode=ff0dbfe2b0f475b52145d08407217ffftVm1PbuvhhZo");
+            var response = await client.GetAsync($"barcode={barcode}");
+            Console.WriteLine("=== OtoSticker Product Price Response ===");
+
+            var content = await response.Content.ReadAsStringAsync();
+            Console.WriteLine(content);
+            Console.WriteLine("=========================================");
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(content);
+                var price = doc.RootElement
+                    .GetProperty("result")
+                    .GetProperty("price")
+                    .GetDecimal();
+
+                return price;
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
 
     }

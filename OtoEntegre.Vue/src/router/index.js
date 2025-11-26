@@ -37,6 +37,11 @@ const routes = [
         component: () => import('@/views/pages/trendyol-entegrasyon/index.vue'),
       },
       {
+        path: '/ekstreler',
+        name: 'ekstreler',
+        component: () => import('@/views/pages/ekstreler/ty-index.vue'),
+      },
+      {
         path: '/urunler',
         name: 'urunler',
         component: () => import('@/views/pages/urunler/index.vue'),

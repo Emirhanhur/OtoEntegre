@@ -1,3 +1,5 @@
+using System.Net.Http.Headers;
+using Newtonsoft.Json;
 using Microsoft.AspNetCore.Mvc;
 using OtoEntegre.Api.Entities;
 using OtoEntegre.Api.Repositories;
@@ -17,8 +19,10 @@ namespace OtoEntegre.Api.Controllers
         private readonly EntegrasyonService _entegrasyonService;
         private readonly TrendyolService _trendyolService;
         private readonly AppDbContext _dbContext;
+        private readonly IHttpClientFactory _httpClientFactory;
 
         public UrunlerController(
+            IHttpClientFactory httpClientFactory,
             IGenericRepository<Urunler> repo,
             EntegrasyonService entegrasyonService,
             TrendyolService trendyolService,
@@ -59,6 +63,103 @@ namespace OtoEntegre.Api.Controllers
             await _repo.SaveAsync();
 
             return CreatedAtAction(nameof(GetById), new { id = item.Id }, item);
+        }
+
+        public class TrendyolUpdateProductItem
+        {
+            public string barcode { get; set; } = string.Empty;
+            public string title { get; set; } = string.Empty;
+            public string productMainId { get; set; } = string.Empty;
+            public long brandId { get; set; }
+            public long categoryId { get; set; }
+            public string stockCode { get; set; } = string.Empty;
+            public int dimensionalWeight { get; set; }
+            public string description { get; set; } = string.Empty;
+            public string currencyType { get; set; } = string.Empty;
+            public int? deliveryDuration { get; set; }
+            public int vatRate { get; set; }
+            public string? locationBasedDelivery { get; set; }
+            public string? lotNumber { get; set; }
+            public DeliveryOption? deliveryOption { get; set; }
+            public List<TrendyolImageDto> images { get; set; } = new();
+            public List<TrendyolUpdateAttribute> attributes { get; set; } = new();
+            public int cargoCompanyId { get; set; }
+            public int? shipmentAddressId { get; set; }
+            public int? returningAddressId { get; set; }
+
+        }
+
+        public class DeliveryOption
+        {
+            public int deliveryDuration { get; set; }
+            public string fastDeliveryType { get; set; } = string.Empty; // SAME_DAY_SHIPPING | FAST_DELIVERY
+        }
+
+        public class TrendyolUpdateAttribute
+        {
+            public int attributeId { get; set; }
+            public long? attributeValueId { get; set; }
+            public string? customAttributeValue { get; set; }
+        }
+
+
+        [HttpPut("trendyol/{kullaniciId}/update-product")]
+        public async Task<IActionResult> UpdateProductAsync(Guid kullaniciId, [FromBody] TrendyolUpdateProductItem productItem)
+        {
+            var entegrasyon = (await _entegrasyonService.GetAllAsync())
+                .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
+
+            if (entegrasyon == null)
+                return NotFound(new { success = false, message = "Entegrasyon bulunamadı." });
+
+            var supplierId = entegrasyon.Seller_Id.Value;
+            var apiKey = entegrasyon.Api_Key;
+            var apiSecret = entegrasyon.Api_Secret;
+
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", "OtoEntegre");
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Basic",
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes($"{apiKey}:{apiSecret}")));
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            var url = $"https://apigw.trendyol.com/integration/product/sellers/{supplierId}/products";
+
+            var payload = new { items = new[] { productItem } };
+            var json = System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var request = new HttpRequestMessage(HttpMethod.Put, url) { Content = content };
+            var response = await client.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+
+            // LOG - Trendyol cevabını tam olarak yaz
+            Console.WriteLine($"[TrendyolService] updateProduct StatusCode: {response.StatusCode}");
+            Console.WriteLine($"[TrendyolService] updateProduct ResponseBody: {body}");
+
+            // Eğer Trendyol boş body dönmüşse bunu de bildirelim, ama status / headers'i dönelim
+            var headers = response.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value));
+
+            // Eğer body JSON ise parse etmeye çalış, değilse raw string olarak dön
+            object parsedBody = null;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(body))
+                    parsedBody = System.Text.Json.JsonSerializer.Deserialize<object>(body);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+                return BadRequest(new { error = ex.Message });
+            }
+
+            return StatusCode((int)response.StatusCode, new
+            {
+                success = response.IsSuccessStatusCode,
+                statusCode = (int)response.StatusCode,
+                headers,
+                body = parsedBody ?? body
+            });
         }
 
         [HttpPut("{id}")]
@@ -171,36 +272,118 @@ namespace OtoEntegre.Api.Controllers
             return Ok(new { imported = products.Count });
         }
 
+        [HttpGet("trendyol/{kullaniciId}/product-by-barcode")]
+        public async Task<IActionResult> GetTrendyolProductByBarcode(Guid kullaniciId, string barcode)
+        {
+            if (string.IsNullOrWhiteSpace(barcode))
+                return BadRequest("Barkod gönderilmedi.");
+
+            // Entegrasyon bul
+            var entegrasyon = (await _entegrasyonService.GetAllAsync())
+                .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
+
+            if (entegrasyon == null)
+                return NotFound("Kullanıcının Trendyol entegrasyonu bulunamadı.");
+
+            if (!entegrasyon.Seller_Id.HasValue)
+                return BadRequest("Trendyol sellerId bulunamadı.");
+
+            // Trendyol API çağır - filtre sadece barkod
+            var resp = await _trendyolService.GetProductsAsync(
+                entegrasyon.Seller_Id.Value,
+                entegrasyon.Api_Key,
+                entegrasyon.Api_Secret,
+                page: 0,
+                size: 1,
+                search: null,
+                barcode: barcode,
+                approved: null,
+                archived: null,
+                onSale: null,
+                rejected: null,
+                blacklisted: null
+            );
+
+            if (resp == null || resp.content == null || resp.content.Count == 0)
+                return NotFound("Bu barkod ile Trendyol’da ürün bulunamadı.");
+
+            var p = resp.content.First();
+
+            var mapped = new
+            {
+                barcode = p.barcode,
+                productCode = p.productCode,
+                title = p.title,
+                description = p.description,
+                brand = p.brand,
+                brandId = p.brandId,
+                category = p.categoryName,
+                categoryId = p.pimCategoryId,
+                stockCode = p.stockCode,
+                deliveryDuration = p.deliveryDuration,
+                dimensionalWeight = p.dimensionalWeight,
+                cargoCompanyId = p.cargoCompanyId,
+                shipmentAddressId = p.shipmentAddressId,
+                returningAddressId = p.returningAddressId,
+                vatRate = p.vatRate,
+                images = p.images?.Select(x => new { url = x.url }).ToList(),
+                attributes = p.attributes?.Select(a => new
+                {
+                    attributeId = a.attributeId,
+                    attributeValueId = a.attributeValueId,
+                    customAttributeValue = a.attributeValue
+                }).ToList()
+            };
+
+            return Ok(mapped);
+        }
 
 
         [HttpGet("trendyol/{kullaniciId}")]
-        public async Task<IActionResult> GetTrendyolProducts(Guid kullaniciId, string? search = null, int page = 0, int size = 50)
+        public async Task<IActionResult> GetTrendyolProducts(
+     Guid kullaniciId,
+     string? search = null,
+     string? barcode = null,
+     bool? approved = null,      // ✅ onaylı filtre
+     bool? archived = null,      // ✅ arşivlenmiş filtre
+     bool? onSale = null,        // ✅ satışta filtre
+     bool? rejected = null,      // ✅ reddedilen filtre
+     bool? blacklisted = null,   // ✅ blacklist filtre
+     int page = 0,
+     int size = 50)
         {
-            // Kullanıcının entegrasyonunu al
             var entegrasyon = (await _entegrasyonService.GetAllAsync())
                                 .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
 
             if (entegrasyon == null)
                 return NotFound("Kullanıcının Trendyol entegrasyonu bulunamadı.");
 
-            if (!entegrasyon.Seller_Id.HasValue || string.IsNullOrEmpty(entegrasyon.Api_Key) || string.IsNullOrEmpty(entegrasyon.Api_Secret))
-                return BadRequest("Entegrasyon için gerekli bilgiler eksik.");
-
             var supplierId = entegrasyon.Seller_Id.Value;
 
-            // Fetch only the requested page from Trendyol (Trendyol API supports page & size)
             try
             {
-                var resp = await _trendyolService.GetProductsAsync(supplierId, entegrasyon.Api_Key, entegrasyon.Api_Secret, page, size, search);
+                var resp = await _trendyolService.GetProductsAsync(
+                    supplierId,
+                    entegrasyon.Api_Key,
+                    entegrasyon.Api_Secret,
+                    page,
+                    size,
+                    search,
+                    barcode,
+                    approved,
+                    archived,
+                    onSale,
+                    rejected,
+                    blacklisted
+                );
 
                 if (resp == null)
                     return StatusCode(502, "Trendyol API'den ürün yanıtı alınamadı.");
 
-                // Map TrendyolProduct -> shape expected by frontend
                 var mapped = resp.content.Select(p => new
                 {
                     productCode = p.productCode,
-                    barcode = p.id ?? string.Empty,
+                    barcode = p.barcode,
                     title = p.title,
                     description = p.description,
                     brand = p.brand,
@@ -208,9 +391,11 @@ namespace OtoEntegre.Api.Controllers
                     salePrice = p.salePrice,
                     listPrice = p.listPrice,
                     stock = p.quantity,
-                    onSale = p.onSale,
                     approved = p.approved,
                     archived = p.archived,
+                    onSale = p.onSale,
+                    rejected = p.rejected,
+                    blacklisted = p.blacklisted,
                     category = !string.IsNullOrEmpty(p.categoryName) ? p.categoryName : (p.pimCategoryId != 0 ? p.pimCategoryId.ToString() : string.Empty),
                     productUrl = p.productUrl,
                     createDateTime = p.createDateTime,
@@ -224,8 +409,6 @@ namespace OtoEntegre.Api.Controllers
                     }),
                     images = (object[])(p.images?.Select(i => new { url = i.url }).ToArray() ?? Array.Empty<object>())
                 }).ToList();
-
-
 
                 return Ok(new
                 {
@@ -285,7 +468,10 @@ namespace OtoEntegre.Api.Controllers
                 }).ToArray()
             };
 
-            Console.WriteLine(JsonSerializer.Serialize(productPayload, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(
+                productPayload,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
+            ));
 
             var result = await _trendyolService.AddProductAsync(
                 entegrasyon.Seller_Id.Value,
@@ -298,6 +484,29 @@ namespace OtoEntegre.Api.Controllers
                 return StatusCode(500, $"Trendyol'a ürün eklenemedi: {result.Message}");
 
             return Ok(new { message = "Ürün varyantları Trendyol hesabına başarıyla eklendi." });
+        }
+
+
+        [HttpGet("trendyol/batch-result")]
+        public async Task<IActionResult> GetBatchResult(Guid kullaniciId, string batchId)
+        {
+            var entegrasyon = (await _entegrasyonService.GetAllAsync())
+                .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
+
+            if (entegrasyon == null)
+                return NotFound("Trendyol entegrasyonu bulunamadı.");
+
+            var result = await _trendyolService.GetBatchResultAsync(
+                entegrasyon.Seller_Id!.Value,
+                entegrasyon.Api_Key!,
+                entegrasyon.Api_Secret!,
+                batchId
+            );
+
+            if (result == null)
+                return StatusCode(502, "Batch sonucu alınamadı.");
+
+            return Ok(result);
         }
 
 
@@ -364,26 +573,112 @@ namespace OtoEntegre.Api.Controllers
             }
         }
 
-        // POST api/urunler/{productCode}/update-price
-        // Body: { "kullaniciId": "guid", "price": 123.45 }
-        [HttpPost("{productCode}/update-price")]
-        public async Task<IActionResult> UpdatePrice(long productCode, [FromBody] UpdatePriceRequest req)
+        [HttpPost("update-price")]
+
+        public async Task<string> UpdatePriceAndInventory(long sellerId, List<ProductUpdateDto> items, Guid kullaniciId)
         {
-            // NOTE: This currently only logs the requested update. Persisting or updating Trendyol
-            // requires additional implementation. This endpoint acknowledges the request.
-            Console.WriteLine($"Price update requested: productCode={productCode}, price={req.Price}, kullaniciId={req.KullaniciId}");
-            // Optionally: find urun and update local record or call TrendyolService to update remote price.
-            return Ok(new { success = true });
+            var entegrasyon = (await _entegrasyonService.GetAllAsync())
+                                   .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
+
+
+
+            var supplierId = entegrasyon.Seller_Id.Value;
+            var apiKey = entegrasyon.Api_Key;
+            var apiSecret = entegrasyon.Api_Secret;
+            var httpClient = _httpClientFactory.CreateClient();
+
+            var url = $"https://apigw.trendyol.com/integration/inventory/sellers/{sellerId}/products/price-and-inventory";
+
+            var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{apiKey}:{apiSecret}"));
+
+            var request = new HttpRequestMessage(HttpMethod.Put, url);
+            request.Headers.Add("Authorization", $"Basic {auth}");
+            request.Content = new StringContent(JsonConvert.SerializeObject(items), Encoding.UTF8, "application/json");
+
+
+            var body = new
+            {
+                items = items
+            };
+
+            var jsonBody = JsonConvert.SerializeObject(body);
+            var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+
+            ;
+
+            var response = await httpClient.PostAsync(url, content);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            return responseContent;
+        }
+        public class ProductUpdateDto
+        {
+            public string barcode { get; set; }
+            public int quantity { get; set; }
+            public decimal salePrice { get; set; }
+            public decimal listPrice { get; set; }
         }
 
 
-    [HttpPost("trendyol/download-template/{categoryId}")]
-public IActionResult DownloadTrendyolTemplate(long categoryId, [FromBody] DownloadTemplateRequest request)
-{
-    var csv = new StringBuilder();
+        // POST api/urunler/{productCode}/update-price
+        // Body: { "kullaniciId": "guid", "price": 123.45 }
+        [HttpPost("{barkod}/update-price")]
+        public async Task<IActionResult> UpdatePrice(string barkod, [FromBody] UpdatePriceRequest req)
+        {
+            try
+            {
+                Console.WriteLine($"Price update requested: productCode={barkod}, price={req.Price}, kullaniciId={req.KullaniciId}");
 
-    // Trendyol API'ye göre zorunlu + isteğe bağlı alanlar
-    var headers = new List<string>
+                if (!req.KullaniciId.HasValue)
+                    return BadRequest(new { success = false, message = "KullaniciId gereklidir." });
+
+                var entegrasyon = (await _entegrasyonService.GetAllAsync())
+                                    .FirstOrDefault(e => e.Kullanici_Id == req.KullaniciId.Value);
+
+                if (entegrasyon == null)
+                    return NotFound(new { success = false, message = "Kullanıcının Trendyol entegrasyonu bulunamadı." });
+
+                if (!entegrasyon.Seller_Id.HasValue || string.IsNullOrEmpty(entegrasyon.Api_Key) || string.IsNullOrEmpty(entegrasyon.Api_Secret))
+                    return BadRequest(new { success = false, message = "Entegrasyon bilgileri eksik." });
+
+                var sellerId = entegrasyon.Seller_Id.Value;
+
+                // Try to determine barcode from local product record (Sku may contain barcode or productCode)
+                var allLocal = await _repo.GetAllAsync();
+                var local = allLocal.FirstOrDefault(u => u.Sku == barkod.ToString() || u.Sku == barkod.ToString());
+                string barcode = local?.Sku ?? barkod.ToString();
+
+                // Build items payload
+                var salePrice = req.Price;
+                var listPrice = req.ListPrice ?? req.Price;
+                var quantity = req.Quantity;
+
+                var items = new List<(string barcode, int? quantity, decimal? salePrice, decimal? listPrice)>
+                {
+                    (barcode, quantity, salePrice, listPrice)
+                };
+
+                var result = await _trendyolService.UpdatePriceAndInventoryByBarcodeAsync(sellerId, entegrasyon.Api_Key, entegrasyon.Api_Secret, items);
+
+                if (!result.Success)
+                    return StatusCode(502, new { success = false, message = result.Message });
+
+                return Ok(new { success = true, message = result.Message, batchRequestId = result.BatchRequestId });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+
+        [HttpPost("trendyol/download-template/{categoryId}")]
+        public IActionResult DownloadTrendyolTemplate(long categoryId, [FromBody] DownloadTemplateRequest request)
+        {
+            var csv = new StringBuilder();
+
+            // Trendyol API'ye göre zorunlu + isteğe bağlı alanlar
+            var headers = new List<string>
     {
         "barcode (*)",
         "title (*)",
@@ -408,35 +703,38 @@ public IActionResult DownloadTrendyolTemplate(long categoryId, [FromBody] Downlo
         "attributes (attributeId:attributeValueId veya customAttributeValue)"
     };
 
-    // Eğer kategoriye özel attribute başlıkları varsa ekle
-    if (request?.Columns?.Any() == true)
-    {
-        headers.AddRange(request.Columns.Select(c => c.Header));
-    }
+            // Eğer kategoriye özel attribute başlıkları varsa ekle
+            if (request?.Columns?.Any() == true)
+            {
+                headers.AddRange(request.Columns.Select(c => c.Header));
+            }
 
-    // Başlık satırını oluştur
-    csv.AppendLine(string.Join(",", headers));
+            // Başlık satırını oluştur
+            csv.AppendLine(string.Join(",", headers));
 
-    var bytes = Encoding.UTF8.GetBytes(csv.ToString());
+            var bytes = Encoding.UTF8.GetBytes(csv.ToString());
 
-    return File(bytes, "text/csv", $"trendyol-urun-sablonu-{categoryId}.csv");
-}
+            return File(bytes, "text/csv", $"trendyol-urun-sablonu-{categoryId}.csv");
+        }
 
-public class DownloadTemplateRequest
-{
-    public long CategoryId { get; set; }
-    public List<ColumnInfo> Columns { get; set; } = new();
-    public class ColumnInfo
-    {
-        public string Header { get; set; } = "";
-    }
-}
+        public class DownloadTemplateRequest
+        {
+            public long CategoryId { get; set; }
+            public List<ColumnInfo> Columns { get; set; } = new();
+            public class ColumnInfo
+            {
+                public string Header { get; set; } = "";
+            }
+        }
 
 
         public class UpdatePriceRequest
         {
             public Guid? KullaniciId { get; set; }
             public decimal Price { get; set; }
+            // Optional: list price and available quantity
+            public decimal? ListPrice { get; set; }
+            public int? Quantity { get; set; }
         }
 
     }

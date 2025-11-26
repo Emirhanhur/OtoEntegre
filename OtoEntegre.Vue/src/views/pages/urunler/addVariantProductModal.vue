@@ -228,7 +228,7 @@ export default {
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg rounded-4">
                 <div class="modal-header bg-primary text-white rounded-top-4">
-                    <h5 class="modal-title fw-semibold"><i class="bi bi-box-seam me-2"></i>Yeni Ürün Ekle</h5>
+                    <h5 class="modal-title fw-semibold"><span class="material-icons me-2 align-middle">inventory_2</span>Yeni Ürün Ekle</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body bg-light">

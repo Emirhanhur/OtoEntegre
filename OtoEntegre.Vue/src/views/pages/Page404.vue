@@ -12,7 +12,7 @@
           </div>
           <CInputGroup class="input-prepend">
             <CInputGroupText>
-              <CIcon icon="cil-magnifying-glass" />
+              <span class="material-icons">search</span>
             </CInputGroupText>
             <CFormInput type="text" placeholder="What are you looking for?" />
             <CButton color="info">Search</CButton>

@@ -47,190 +47,220 @@ namespace OtoEntegre.Api.Services
             public double BarcodeTextY { get; set; } = 370;
         }
 
-        public async Task<string> GenerateFromTemplateAsync(
-            string templatePath,
-            string outputDirectory,
-            string siparisNo,
-            string adSoyad,
-            string adres,
-            string kargoBarkod,
-            string kargoBarkodNumarasi,
-            string renk,
-            string beden,
-            string kargoTakipNumarasi,
-            string urunTrendyolKod,
+       public async Task<string> GenerateFromTemplateAsync(
+    string templatePath,
+    string outputDirectory,
+    string siparisNo,
+    string adSoyad,
+    string adres,
+    string kargoBarkod,
+    string kargoBarkodNumarasi,
+    string renk,
+    string beden,
+    string kargoTakipNumarasi,
+    string urunTrendyolKod,
+    IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, string StokKodu, string MerchantSku, string SiparisNotu)> urunler,
+    PdfLabelPositions? positions = null)
+{
+    if (!File.Exists(templatePath))
+        throw new FileNotFoundException("PDF şablonu bulunamadı", templatePath);
 
-IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, string StokKodu, string MerchantSku, string SiparisNotu)> urunler,
-            PdfLabelPositions? positions = null)
+    if (!Directory.Exists(outputDirectory))
+        Directory.CreateDirectory(outputDirectory);
+
+    var outputFile = Path.Combine(outputDirectory, $"{adSoyad}.pdf");
+    var pos = positions ?? new PdfLabelPositions();
+
+    using (var document = PdfReader.Open(templatePath, PdfDocumentOpenMode.Modify))
+    {
+        var page = document.Pages[0];
+        using (var gfx = XGraphics.FromPdfPage(page))
         {
-            if (!File.Exists(templatePath))
-                throw new FileNotFoundException("PDF şablonu bulunamadı", templatePath);
+            var font = new XFont(pos.FontFamily, pos.FontSize, XFontStyle.Regular);
+            var bold = new XFont(pos.FontBoldFamily, pos.FontBoldSize, XFontStyle.Bold);
+            var tf = new XTextFormatter(gfx);
 
-            if (!Directory.Exists(outputDirectory))
-                Directory.CreateDirectory(outputDirectory);
+            // --- BAŞLIK, ADRES VE KARGO BARKODU KISIMLARI (AYNI) ---
+            gfx.DrawString($"{siparisNo}", bold, XBrushes.Black, new XPoint(pos.SiparisNoX, pos.SiparisNoY));
+            gfx.DrawString($"{adSoyad}", font, XBrushes.Black, new XPoint(pos.AdSoyadX, pos.AdSoyadY));
 
-            var outputFile = Path.Combine(outputDirectory, $"{adSoyad}.pdf");
-            var pos = positions ?? new PdfLabelPositions();
+            var adresRect = new XRect(pos.AdresX, pos.AdresY, pos.AdresWidth, pos.AdresHeight);
+            tf.DrawString(adres ?? "", font, XBrushes.Black, adresRect, XStringFormats.TopLeft);
 
-            using (var document = PdfReader.Open(templatePath, PdfDocumentOpenMode.Modify))
+            if (!string.IsNullOrWhiteSpace(kargoTakipNumarasi))
             {
-                var page = document.Pages[0];
-                using (var gfx = XGraphics.FromPdfPage(page))
+                string tempPng = Path.Combine(Path.GetTempPath(), $"barcode_{Guid.NewGuid():N}.png");
+                try
                 {
-                    var font = new XFont(pos.FontFamily, pos.FontSize, XFontStyle.Regular);
-                    var bold = new XFont(pos.FontBoldFamily, pos.FontBoldSize, XFontStyle.Bold);
-                    var tf = new XTextFormatter(gfx);
-
-                    // Başlık Bilgileri
-                    gfx.DrawString($"{siparisNo}", bold, XBrushes.Black, new XPoint(pos.SiparisNoX, pos.SiparisNoY));
-                    gfx.DrawString($"{adSoyad}", font, XBrushes.Black, new XPoint(pos.AdSoyadX, pos.AdSoyadY));
-
-                    // Adres
-                    var adresRect = new XRect(pos.AdresX, pos.AdresY, pos.AdresWidth, pos.AdresHeight);
-                    tf.DrawString(adres ?? "", font, XBrushes.Black, adresRect, XStringFormats.TopLeft);
-
-                    // Barkod
-                    if (!string.IsNullOrWhiteSpace(kargoTakipNumarasi))
+                    var ms = GenerateCode128BarcodePng(kargoTakipNumarasi, (int)pos.BarcodeWidth, (int)pos.BarcodeHeight);
+                    File.WriteAllBytes(tempPng, ms.ToArray());
+                    using (var ximg = XImage.FromFile(tempPng))
                     {
-                        string tempPng = Path.Combine(Path.GetTempPath(), $"barcode_{Guid.NewGuid():N}.png");
-                        try
-                        {
-                            var ms = GenerateCode128BarcodePng(kargoTakipNumarasi, (int)pos.BarcodeWidth, (int)pos.BarcodeHeight);
-                            File.WriteAllBytes(tempPng, ms.ToArray());
-                            using (var ximg = XImage.FromFile(tempPng))
-                            {
-                                gfx.DrawImage(ximg, pos.BarcodeX, pos.BarcodeY, pos.BarcodeWidth, pos.BarcodeHeight);
-                                gfx.DrawString(kargoTakipNumarasi, font, XBrushes.Black,
-                                    new XRect(pos.BarcodeX, pos.BarcodeY + pos.BarcodeHeight + 5, pos.BarcodeWidth, 20),
-                                    XStringFormats.Center);
-                            }
-                        }
-                        finally
-                        {
-                            if (File.Exists(tempPng))
-                                File.Delete(tempPng);
-                        }
+                        gfx.DrawImage(ximg, pos.BarcodeX, pos.BarcodeY, pos.BarcodeWidth, pos.BarcodeHeight);
+                        gfx.DrawString(kargoTakipNumarasi, font, XBrushes.Black,
+                            new XRect(pos.BarcodeX, pos.BarcodeY + pos.BarcodeHeight + 5, pos.BarcodeWidth, 20),
+                            XStringFormats.Center);
                     }
-
-                    // Ürün Tablosu
-                    double y = pos.UrunBaslikY + 50;
-                    double marginLeft = 15;
-                    double tableWidth = page.Width - 2;
-                    double rowHeight = pos.UrunSatirHeight;
-                    string[] headers = new[] { "Ürün Adı", "Adet", "Renk", "Beden", "Barkod", "Stok Kodu" };
-
-                    double[] colWidths = new double[] { 150, 40, 70, 60, 100, 130 };
-
-
-                    double[] colX = new double[colWidths.Length];
-                    colX[0] = marginLeft;
-                    for (int i = 1; i < colWidths.Length; i++)
-                        colX[i] = colX[i - 1] + colWidths[i - 1];
-
-                    // Tablo Başlıkları
-                    for (int i = 0; i < headers.Length; i++)
-                    {
-                        gfx.DrawRectangle(XPens.Black, colX[i], y, colWidths[i], rowHeight);
-                        gfx.DrawString(headers[i], bold, XBrushes.Black, new XRect(colX[i], y, colWidths[i], rowHeight), XStringFormats.Center);
-                    }
-                    y += rowHeight;
-
-                    foreach (var u in urunler)
-                    {
-
-                        string[] cells = new[] { u.Ad, u.Adet.ToString(), u.Renk, u.Beden, u.Barkod, u.MerchantSku };
-
-                        double cellPadding = 4;
-                        double maxCellHeight = rowHeight;
-
-                        var tfCell = new XTextFormatter(gfx);
-
-                        // Satır yüksekliğini hesaplamak için
-                        for (int i = 0; i < cells.Length; i++)
-                        {
-                            double cellWidth = colWidths[i] - 4;
-                            double cellHeight = rowHeight;
-
-                            if (i == 0 || i == 5) // Ürün Adı veya Stok Kodu
-                                                  // Ürün Adı veya Sipariş Notu
-                            {
-                                string text = cells[i];
-                                var words = text.Split(' ');
-                                var lines = new List<string>();
-                                string currentLine = "";
-
-                                foreach (var word in words)
-                                {
-                                    string testLine = string.IsNullOrEmpty(currentLine) ? word : currentLine + " " + word;
-                                    var size = gfx.MeasureString(testLine, font);
-                                    if (size.Width > cellWidth)
-                                    {
-                                        lines.Add(currentLine);
-                                        currentLine = word;
-                                    }
-                                    else
-                                    {
-                                        currentLine = testLine;
-                                    }
-                                }
-                                if (!string.IsNullOrEmpty(currentLine))
-                                    lines.Add(currentLine);
-
-                                cellHeight = lines.Count * gfx.MeasureString("A", font).Height + cellPadding;
-                                if (cellHeight > maxCellHeight)
-                                    maxCellHeight = cellHeight;
-                            }
-                        }
-
-                        // Hücreleri çiz
-                        for (int i = 0; i < cells.Length; i++)
-                        {
-                            gfx.DrawRectangle(XPens.Gray, colX[i], y, colWidths[i], maxCellHeight);
-                            var rect = new XRect(colX[i] + 2, y + 2, colWidths[i] - 4, maxCellHeight - 4);
-
-                           if (i == 0 || i == 5)
-
-                            {
-                                string text = cells[i];
-                                var words = text.Split(' ');
-                                double lineHeight = gfx.MeasureString("A", font).Height;
-                                double drawY = y + 2;
-                                string currentLine = "";
-
-                                foreach (var word in words)
-                                {
-                                    string testLine = string.IsNullOrEmpty(currentLine) ? word : currentLine + " " + word;
-                                    if (gfx.MeasureString(testLine, font).Width > colWidths[i] - 4)
-                                    {
-                                        tfCell.DrawString(currentLine, font, XBrushes.Black, new XRect(colX[i] + 2, drawY, colWidths[i] - 4, lineHeight), XStringFormats.TopLeft);
-                                        drawY += lineHeight;
-                                        currentLine = word;
-                                    }
-                                    else
-                                    {
-                                        currentLine = testLine;
-                                    }
-                                }
-                                if (!string.IsNullOrEmpty(currentLine))
-                                    tfCell.DrawString(currentLine, font, XBrushes.Black, new XRect(colX[i] + 2, drawY, colWidths[i] - 4, lineHeight), XStringFormats.TopLeft);
-                            }
-                            else
-                            {
-                                gfx.DrawString(cells[i], font, XBrushes.Black, rect, XStringFormats.Center);
-                            }
-                        }
-
-                        y += maxCellHeight;
-                        if (y > page.Height - 40)
-                            break;
-                    }
-
-
                 }
-                document.Save(outputFile);
+                finally { if (File.Exists(tempPng)) File.Delete(tempPng); }
             }
-            await Task.CompletedTask;
-            return outputFile;
+
+            // ---------------------------------------------------------
+            // ÜRÜN TABLOSU (GÜNCELLENEN KISIM)
+            // ---------------------------------------------------------
+            
+            double y = pos.UrunBaslikY + 50;
+            double marginLeft = 15;
+            double rowHeight = pos.UrunSatirHeight;
+            string[] headers = new[] { "Ürün Adı", "Adet", "Renk", "Beden", "Barkod", "Stok Kodu" };
+            double[] colWidths = new double[] { 150, 40, 70, 60, 100, 130 };
+
+            double[] colX = new double[colWidths.Length];
+            colX[0] = marginLeft;
+            for (int i = 1; i < colWidths.Length; i++)
+                colX[i] = colX[i - 1] + colWidths[i - 1];
+
+            // Başlıkları Çiz
+            for (int i = 0; i < headers.Length; i++)
+            {
+                gfx.DrawRectangle(XPens.Black, colX[i], y, colWidths[i], rowHeight);
+                gfx.DrawString(headers[i], bold, XBrushes.Black, new XRect(colX[i], y, colWidths[i], rowHeight), XStringFormats.Center);
+            }
+            y += rowHeight;
+
+            foreach (var u in urunler)
+            {
+                string[] cells = new[] { u.Ad, u.Adet.ToString(), u.Renk, u.Beden, u.Barkod, u.MerchantSku };
+                double maxCellHeight = rowHeight;
+                var tfCell = new XTextFormatter(gfx);
+                double lineHeight = gfx.MeasureString("A", font).Height;
+
+                // 1. ADIM: Yükseklik Hesaplama
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    if (i == 0 || i == 4 || i == 5) // Ürün, Barkod, Stok
+                    {
+                        double cellWidth = colWidths[i] - 4;
+                        var wrappedLines = GetWrappedLines(gfx, cells[i], font, cellWidth);
+                        
+                        double neededHeight = wrappedLines.Count * lineHeight + 4; // +4 padding
+                        if (neededHeight > maxCellHeight)
+                            maxCellHeight = neededHeight;
+                    }
+                }
+
+                // 2. ADIM: Çizim (Dikey Ortalama Eklendi)
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    gfx.DrawRectangle(XPens.Gray, colX[i], y, colWidths[i], maxCellHeight);
+                    
+                    if (i == 0 || i == 4 || i == 5)
+                    {
+                        double cellWidth = colWidths[i] - 4;
+                        var wrappedLines = GetWrappedLines(gfx, cells[i], font, cellWidth);
+
+                        // --- DİKEY ORTALAMA HESABI ---
+                        // Toplam metin bloğu yüksekliği
+                        double totalTextHeight = wrappedLines.Count * lineHeight;
+                        
+                        // (Hücre Yüksekliği - Metin Yüksekliği) / 2 = Üstten Bırakılacak Boşluk
+                        double verticalOffset = (maxCellHeight - totalTextHeight) / 2;
+                        
+                        // Yeni çizim başlangıç noktası
+                        double drawY = y + verticalOffset; 
+
+                        foreach (var line in wrappedLines)
+                        {
+                            // İsterseniz XStringFormats.TopCenter yaparak yatayda da ortalayabilirsiniz.
+                            // Ancak uzun ürün isimleri için TopLeft daha okunaklıdır. 
+                            // Barkodlar için TopCenter denemek isterseniz değiştirebilirsiniz.
+                            tfCell.DrawString(line, font, XBrushes.Black, 
+                                new XRect(colX[i] + 2, drawY, cellWidth, lineHeight), 
+                                XStringFormats.TopLeft);
+                            
+                            drawY += lineHeight;
+                        }
+                    }
+                    else
+                    {
+                        // Adet, Renk, Beden (Zaten ortalı)
+                        var rect = new XRect(colX[i] + 2, y + 2, colWidths[i] - 4, maxCellHeight - 4);
+                        gfx.DrawString(cells[i], font, XBrushes.Black, rect, XStringFormats.Center);
+                    }
+                }
+
+                y += maxCellHeight;
+                if (y > page.Height - 40) break;
+            }
+        }
+        document.Save(outputFile);
+    }
+    await Task.CompletedTask;
+    return outputFile;
+}
+        /// <summary>
+        /// Bir metni verilen genişliğe sığacak şekilde satırlara böler.
+        /// Eğer tek bir kelime (boşluksuz) genişlikten büyükse, kelimeyi de böler.
+        /// </summary>
+        private List<string> GetWrappedLines(XGraphics gfx, string text, XFont font, double maxWidth)
+        {
+            var lines = new List<string>();
+            if (string.IsNullOrEmpty(text)) return lines;
+
+            var words = text.Split(' ');
+            string currentLine = "";
+
+            foreach (var word in words)
+            {
+                double wordWidth = gfx.MeasureString(word, font).Width;
+
+                // DURUM 1: Kelimenin kendisi sütundan daha geniş (Örn: Uzun Barkod)
+                if (wordWidth > maxWidth)
+                {
+                    // Mevcut satırda bir şeyler varsa önce onu ekle ve temizle
+                    if (!string.IsNullOrEmpty(currentLine))
+                    {
+                        lines.Add(currentLine);
+                        currentLine = "";
+                    }
+
+                    // Uzun kelimeyi harf harf parçala
+                    string tempPart = "";
+                    foreach (char c in word)
+                    {
+                        if (gfx.MeasureString(tempPart + c, font).Width > maxWidth)
+                        {
+                            lines.Add(tempPart); // Sığdığı kadarını ekle
+                            tempPart = c.ToString(); // Yeni satıra geç
+                        }
+                        else
+                        {
+                            tempPart += c;
+                        }
+                    }
+                    // Kalan parçayı bir sonraki kelimeler için başlangıç yap
+                    currentLine = tempPart;
+                }
+                // DURUM 2: Kelime normal boyutta
+                else
+                {
+                    string testLine = string.IsNullOrEmpty(currentLine) ? word : currentLine + " " + word;
+                    if (gfx.MeasureString(testLine, font).Width > maxWidth)
+                    {
+                        lines.Add(currentLine); // Mevcut satırı bitir
+                        currentLine = word;     // Yeni satıra bu kelimeyle başla
+                    }
+                    else
+                    {
+                        currentLine = testLine; // Satıra ekle
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(currentLine))
+                lines.Add(currentLine);
+
+            return lines;
         }
 
         [SupportedOSPlatform("windows")]
@@ -258,6 +288,32 @@ IEnumerable<(string Ad, int Adet, string Renk, string Beden, string Barkod, stri
             bitmap.Save(ms, ImageFormat.Png);
             ms.Position = 0;
             return ms;
+        }
+
+        public MemoryStream MergePdfs(List<string> filePaths)
+        {
+            using (var outputDocument = new PdfSharpCore.Pdf.PdfDocument())
+            {
+                foreach (var filePath in filePaths)
+                {
+                    if (File.Exists(filePath))
+                    {
+                        using (var inputDocument = PdfReader.Open(filePath, PdfDocumentOpenMode.Import))
+                        {
+                            int count = inputDocument.PageCount;
+                            for (int idx = 0; idx < count; idx++)
+                            {
+                                var page = inputDocument.Pages[idx];
+                                outputDocument.AddPage(page);
+                            }
+                        }
+                    }
+                }
+                var ms = new MemoryStream();
+                outputDocument.Save(ms, false);
+                ms.Position = 0;
+                return ms;
+            }
         }
     }
 }

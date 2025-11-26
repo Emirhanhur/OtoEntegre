@@ -74,10 +74,8 @@ const AppSidebarNav = defineComponent({
           },
           {
             togglerContent: () => [
-              h(resolveComponent('CIcon'), {
-                customClassName: 'nav-icon',
-                name: item.icon,
-              }),
+              // render Material Icon instead of CoreUI CIcon
+              h('span', { class: 'material-icons nav-icon' }, mapIconName(item.icon)),
               item.name,
             ],
             default: () => item.items.map((child) => renderItem(child)),
@@ -94,19 +92,12 @@ const AppSidebarNav = defineComponent({
             rel: 'noopener noreferrer',
           },
           {
-            default: () => [
+              default: () => [
               item.icon
-                ? h(resolveComponent('CIcon'), {
-                    customClassName: 'nav-icon',
-                    name: item.icon,
-                  })
+                ? h('span', { class: 'material-icons nav-icon' }, mapIconName(item.icon))
                 : h('span', { class: 'nav-icon' }, h('span', { class: 'nav-icon-bullet' })),
               item.name,
-              item.external && h(resolveComponent('CIcon'), {
-                class: 'ms-2',
-                name: 'cil-external-link',
-                size: 'sm'
-              }),
+              item.external && h('span', { class: 'material-icons ms-2' }, mapIconName('cil-external-link')),
               item.badge &&
                 h(
                   CBadge,
@@ -144,10 +135,7 @@ const AppSidebarNav = defineComponent({
                   {
                     default: () => [
                       item.icon
-                        ? h(resolveComponent('CIcon'), {
-                            customClassName: 'nav-icon',
-                            name: item.icon,
-                          })
+                        ? h('span', { class: 'material-icons nav-icon' }, mapIconName(item.icon))
                         : h('span', { class: 'nav-icon' }, h('span', { class: 'nav-icon-bullet' })),
                       item.name,
                       item.badge &&
@@ -176,6 +164,39 @@ const AppSidebarNav = defineComponent({
               default: () => item.name,
             },
           )
+    }
+
+    // Map common CoreUI 'cil-' and 'cib-' icon names to Material icon names
+    function mapIconName(name) {
+      if (!name) return '';
+      const map = {
+        'cil-speedometer': 'speed',
+        'cil-cart': 'shopping_cart',
+        'cil-settings': 'settings',
+        'cil-file-paper': 'article',
+        'cil-list': 'format_list_bulleted',
+        'cil-chart-line': 'trending_up',
+        'cil-money': 'attach_money',
+        'cil-external-link': 'open_in_new',
+        'cil-options': 'more_vert',
+        'cil-arrow-right': 'arrow_forward',
+        'cil-people': 'people',
+        'cil-user': 'person',
+        'cil-user-follow': 'person_add',
+        'cil-basket': 'shopping_basket',
+        'cil-chart-pie': 'pie_chart',
+        'cil-speedometer': 'speed',
+        'cil-speech': 'chat_bubble',
+        'cil-calendar': 'calendar_today',
+        'cib-facebook': 'public',
+        'cib-twitter': 'public',
+        'cib-linkedin': 'public',
+        'cil-moon': 'dark_mode',
+        'cil-bell': 'notifications',
+        'cil-arrow-top': 'arrow_upward',
+        'cil-arrow-bottom': 'arrow_downward',
+      }
+      return map[name] || name.replace(/^cil-|^cib-/, '')
     }
 
     return () =>

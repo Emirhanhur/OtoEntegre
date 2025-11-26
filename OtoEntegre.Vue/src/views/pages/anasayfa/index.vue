@@ -12,6 +12,7 @@ export default {
       pageSize: 10,
       totalOrders: 0,
       totalAmount: 0,
+      bayiBalance: 0,       // <-- yeni alan
       isLoading: false,
       showModal: false,
       selectedOrder: null,
@@ -29,16 +30,6 @@ export default {
     },
   },
   methods: {
-    async fetchTotalAmount() {
-      try {
-        const res = await api.get(
-          `api/siparisler/by-user/${this.bayiId}/total-amount`
-        );
-        this.totalAmount = res.data;
-      } catch (error) {
-        console.error("Toplam tutar alınamadı:", error);
-      }
-    },
     async fetchOrders() {
       try {
         this.isLoading = true;
@@ -59,6 +50,17 @@ export default {
         this.isLoading = false;
       }
     },
+    async fetchTotalAmount() {
+      try {
+        const res = await api.get(
+          `api/siparisler/by-user/${this.bayiId}/total-amount`
+        );
+        this.totalAmount = res.data;
+      } catch (error) {
+        console.error("Toplam tutar alınamadı:", error);
+      }
+    },
+    
     async fetchOrdersOnly() {
       try {
         this.isLoading = true;
@@ -121,18 +123,31 @@ export default {
       }
       this.fetchOrdersOnly();
     },
-    // Sıralama ikonlarını belirle
+    // Sıralama ikonlarını belirle — artık Material Icons döndürüyor
     getSortIcon(field) {
       if (this.sortField !== field) {
-        return 'bi-arrow-down-up text-muted';
+        return { name: 'unfold_more', extraClass: 'text-muted' };
       }
-      return this.sortDirection === 'asc' ? 'bi-arrow-up text-primary' : 'bi-arrow-down text-primary';
+      return this.sortDirection === 'asc'
+        ? { name: 'arrow_upward', extraClass: 'text-primary' }
+        : { name: 'arrow_downward', extraClass: 'text-primary' };
     },
+    async fetchDealerBalance() {
+    try {
+      const res = await api.get(`api/Siparisler/dealer-by-user?userEmail=${localStorage.getItem("bayi_email")}`);
+      if (res.data && res.data.balance != null) {
+        this.bayiBalance = res.data.balance;
+      }
+    } catch (error) {
+      console.error("Bayi bakiyesi alınamadı:", error);
+    }
+  },
   },
   async mounted() {
     await Promise.all([
       this.fetchOrders(),
-      this.fetchTotalAmount()
+      this.fetchTotalAmount(),
+      this.fetchDealerBalance()
     ]);
   },
 };
@@ -151,6 +166,10 @@ export default {
         <div class="text-lg fw-semibold">Toplam Tutar</div>
         <div class="fs-3">{{ formatCurrency(totalAmount) }}</div>
       </div>
+      <div class="card bg-warning text-white p-3 rounded shadow" style="min-width: 180px;">
+    <div class="text-lg fw-semibold">Bakiye</div>
+    <div class="fs-3">{{ formatCurrency(bayiBalance) }}</div>
+  </div>
     </div>
 
     <!-- Loading Spinner -->
@@ -170,19 +189,19 @@ export default {
               <th @click="sortBy('code')" class="cursor-pointer user-select-none">
                 <div class="d-flex align-items-center gap-2">
                   Sipariş No
-                  <i :class="getSortIcon('code')" class="bi"></i>
+                  <span class="material-icons" :class="getSortIcon('code').extraClass">{{ getSortIcon('code').name }}</span>
                 </div>
               </th>
               <th @click="sortBy('overall')" class="cursor-pointer user-select-none">
                 <div class="d-flex align-items-center gap-2">
                   Toplam Tutar
-                  <i :class="getSortIcon('overall')" class="bi"></i>
+                  <span class="material-icons" :class="getSortIcon('overall').extraClass">{{ getSortIcon('overall').name }}</span>
                 </div>
               </th>
               <th @click="sortBy('createdAt')" class="cursor-pointer user-select-none">
                 <div class="d-flex align-items-center gap-2">
                   Tarih
-                  <i :class="getSortIcon('createdAt')" class="bi"></i>
+                  <span class="material-icons" :class="getSortIcon('createdAt').extraClass">{{ getSortIcon('createdAt').name }}</span>
                 </div>
               </th>
               <th>Detay</th>

@@ -225,7 +225,7 @@ export default {
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg rounded-4">
                 <div class="modal-header bg-primary text-white rounded-top-4">
-                    <h5 class="modal-title fw-semibold"><i class="bi bi-box-seam me-2"></i>Yeni Ürün Ekle</h5>
+                    <h5 class="modal-title fw-semibold"><span class="material-icons me-2 align-middle">inventory_2</span>Yeni Ürün Ekle</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
 
@@ -357,7 +357,7 @@ export default {
 
                         <div class="text-end mt-4">
                             <button type="submit" class="btn btn-primary px-4 py-2">
-                                <i class="bi bi-save me-1"></i> Kaydet
+                                <span class="material-icons me-1 align-middle">save</span> Kaydet
                             </button>
                         </div>
                     </form>

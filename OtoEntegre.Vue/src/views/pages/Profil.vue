@@ -8,6 +8,9 @@ export default {
             user: null,
             entegrasyonlar: [],
             editAd: '',
+            editAdres: '',
+            editSehir: '',
+            editİlce: '',
             editEmail: '',
             editTelefon: '',
             editEntegrasyonTelefon: '',
@@ -39,8 +42,12 @@ export default {
         if (!kullaniciId) return;
         try {
             const userRes = await api.get(`api/users/${kullaniciId}`);
+            console.log(userRes.data);
             this.user = userRes.data;
             this.editAd = userRes.data.ad || '';
+            this.editAdres = userRes.data.adres || '';
+            this.editSehir = userRes.data.sehir || '';
+            this.editİlce = userRes.data.ilce || '';
             this.editEmail = userRes.data.email || '';
             this.editTelefon = userRes.data.telefon || '';
             this.editEntegrasyonTelefon = userRes.data.entegrasyon_Telefon || '';
@@ -81,6 +88,9 @@ export default {
                 let rolId = this.user.roller?.[0]?.rolId;
                 const payload = {
                     ad: this.editAd,
+                    adres: this.editAdres,
+                    sehir: this.editSehir,
+                    ilce: this.editİlce,
                     email: this.editEmail,
                     telefon: this.editTelefon,
                     entegrasyon_Telefon: this.editEntegrasyonTelefon,
@@ -184,6 +194,18 @@ export default {
                             <input v-model="editAd" class="form-control" />
                         </div>
                         <div class="mb-3">
+                            <label class="form-label"><b>Adres</b></label>
+                            <input v-model="editAdres" class="form-control" />
+                        </div>
+                         <div class="mb-3">
+                            <label class="form-label"><b>Sehir</b></label>
+                            <input v-model="editSehir" class="form-control" />
+                        </div>
+                         <div class="mb-3">
+                            <label class="form-label"><b>İlçe</b></label>
+                            <input v-model="editİlce" class="form-control" />
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label"><b>Email</b></label>
                             <input v-model="editEmail" type="email" class="form-control" />
                         </div>
@@ -252,7 +274,8 @@ export default {
                                     class="form-control" />
                                 <button class="btn btn-outline-secondary" type="button"
                                     @click="showOldPassword = !showOldPassword">
-                                    <i :class="showOldPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                                    <span v-if="showOldPassword" class="material-icons">visibility_off</span>
+                                    <span v-else class="material-icons">visibility</span>
                                 </button>
                             </div>
                         </div>
@@ -264,7 +287,8 @@ export default {
                                     class="form-control" />
                                 <button class="btn btn-outline-secondary" type="button"
                                     @click="showNewPassword = !showNewPassword">
-                                    <i :class="showNewPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                                    <span v-if="showNewPassword" class="material-icons">visibility_off</span>
+                                    <span v-else class="material-icons">visibility</span>
                                 </button>
                             </div>
                         </div>
@@ -276,7 +300,8 @@ export default {
                                     class="form-control" />
                                 <button class="btn btn-outline-secondary" type="button"
                                     @click="showConfirmPassword = !showConfirmPassword">
-                                    <i :class="showConfirmPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                                    <span v-if="showConfirmPassword" class="material-icons">visibility_off</span>
+                                    <span v-else class="material-icons">visibility</span>
                                 </button>
                             </div>
                         </div>

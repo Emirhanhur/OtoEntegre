@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -36,6 +37,8 @@ namespace OtoEntegre.Api.Entities
         public DateTime Created_At { get; set; }
         [Column("updated_at")]
         public DateTime Updated_At { get; set; }
+
+[JsonIgnore]
 
         public ICollection<SiparisUrunleri> SiparisUrunleri { get; set; } = new List<SiparisUrunleri>();
     }

@@ -11,15 +11,15 @@ const addClass = props.tabContentClass
 <template>
   <div class="example">
     <CNav variant="underline-border">
-      <CNavItem>
+          <CNavItem>
         <CNavLink href="#" active>
-          <CIcon icon="cil-media-play" class="me-2" />
+          <span class="material-icons me-2">play_arrow</span>
           Önizleme
         </CNavLink>
       </CNavItem>
       <CNavItem>
         <CNavLink :href="url" target="_blank">
-          <CIcon icon="cil-code" class="me-2" />
+          <span class="material-icons me-2">code</span>
           Kod
         </CNavLink>
       </CNavItem>

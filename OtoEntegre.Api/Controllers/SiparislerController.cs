@@ -598,6 +598,18 @@ namespace OtoEntegre.Api.Controllers
             public string? Category3 { get; set; }
             public string? Category4 { get; set; }
         }
+[HttpGet("by-order-number/{orderNumber}")]
+public async Task<IActionResult> GetByOrderNumber(string orderNumber)
+{
+    var siparis = await _appDbContext.Siparisler
+        .Include(x => x.SiparisUrunleri)
+        .FirstOrDefaultAsync(x => x.SiparisNumarasi == orderNumber);
+
+    if (siparis == null)
+        return NotFound(new { message = "Sipariş bulunamadı" });
+
+    return Ok(siparis);
+}
 
 
         [HttpGet("dealer-by-user")]
@@ -917,7 +929,7 @@ namespace OtoEntegre.Api.Controllers
                     }
 
                     // 🔹 Trendyol’dan ürün detaylarını çek — image bilgisi dahil
-var trendyolService = _trendyolService;
+                    var trendyolService = _trendyolService;
                     var products = await trendyolService.GetProductsByBarcodesAsync(
                         entegrasyon.Seller_Id.Value,
                         entegrasyon.Api_Key,
@@ -1270,6 +1282,7 @@ var trendyolService = _trendyolService;
         }
 
 
+
         public class PickingRequest
         {
             public List<PickingLine> Lines { get; set; }
@@ -1284,46 +1297,61 @@ var trendyolService = _trendyolService;
         }
 
 
-        [HttpGet("{siparisId}/urunler")]
-        public async Task<IActionResult> GetSiparisUrunleri(Guid siparisId)
-        {
-            var siparis = await _appDbContext.Siparisler
-                .FirstOrDefaultAsync(s => s.Id == siparisId);
+     [HttpGet("{value}/urunler")]
+public async Task<IActionResult> GetSiparisUrunleri(string value)
+{
+    // value hem Guid hem SiparisNumarasi olabilir
 
-            if (siparis == null)
-                return NotFound(new { message = "Sipariş bulunamadı." });
+    Guid siparisGuid;
+    var siparisQuery = _appDbContext.Siparisler.AsQueryable();
 
-            var urunler = await (from su in _appDbContext.SiparisUrunleri
-                                 join u in _appDbContext.Urunler on su.Urun_Id equals u.Id
-                                 join d in _appDbContext.SiparisDosyalari
-                                     on u.Image equals d.Dosya_Url into dosyalar
-                                 from d in dosyalar.DefaultIfEmpty()
-                                 where su.Siparis_Id == siparisId && (d == null || d.Dosya_Turu == "image")
-                                 select new
-                                 {
-                                     u.Id,
-                                     u.Ad,
-                                     u.ProductCode,
-                                     Image = u.Image ?? string.Empty,
-                                     su.Adet,
-                                     su.Toplam_Fiyat,
-                                     su.SiparisNotu
-                                 }).ToListAsync();
+    // 1️⃣ Önce GUID mi kontrol et
+    if (Guid.TryParse(value, out siparisGuid))
+    {
+        siparisQuery = siparisQuery.Where(s => s.Id == siparisGuid);
+    }
+    else
+    {
+        // 2️⃣ Değilse SiparisNumarasi’na göre ara
+        siparisQuery = siparisQuery.Where(s => s.SiparisNumarasi == value);
+    }
 
-            // Aynı ürünü tekilleştir (adet ve fiyat aynı kalacak)
-            var tekUrunler = urunler
-                .GroupBy(x => x.Id)
-                .Select(g => g.First())
-                .ToList();
+    var siparis = await siparisQuery.FirstOrDefaultAsync();
 
-            return Ok(new
-            {
-                siparisId = siparis.Id,
-                SiparisNo = siparis.SiparisNumarasi,
-                Urunler = tekUrunler
-            });
-        }
+    if (siparis == null)
+        return NotFound(new { message = "Sipariş bulunamadı." });
 
+    // 3️⃣ Ürünleri çek
+    var urunler = await (from su in _appDbContext.SiparisUrunleri
+                         join u in _appDbContext.Urunler on su.Urun_Id equals u.Id
+                         join d in _appDbContext.SiparisDosyalari
+                             on u.Image equals d.Dosya_Url into dosyalar
+                         from d in dosyalar.DefaultIfEmpty()
+                         where su.Siparis_Id == siparis.Id && (d == null || d.Dosya_Turu == "image")
+                         select new
+                         {
+                             u.Id,
+                             u.Ad,
+                             u.ProductCode,
+                             Image = u.Image ?? string.Empty,
+                             su.Adet,
+                             su.Toplam_Fiyat,
+                             su.SiparisNotu
+                         }).ToListAsync();
+
+    // Aynı ürünü tekilleştir
+    var tekUrunler = urunler
+        .GroupBy(x => x.Id)
+        .Select(g => g.First())
+        .ToList();
+
+    return Ok(new
+    {
+        siparisId = siparis.Id,
+        SiparisNo = siparis.SiparisNumarasi,
+        Urunler = tekUrunler
+    });
+}
 
 
         //VERİTABANINDAN KULLANICI BAZLI SİPARİŞ SAYISINI ÇEKER
@@ -1496,22 +1524,22 @@ var trendyolService = _trendyolService;
         }
 
 
-        [HttpPost("send-siparis-tedarik/{orderCode}")]
-        public async Task<IActionResult> SendSiparisTedarik(string orderCode, [FromServices] TedarikService tedarikService)
-        {
+        // [HttpPost("send-siparis-tedarik/{orderCode}")]
+        // public async Task<IActionResult> SendSiparisTedarik(string orderCode, [FromServices] TedarikService tedarikService)
+        // {
 
-            Console.WriteLine("SendSiparisTedarik servisi başladı");
+        //     Console.WriteLine("SendSiparisTedarik servisi başladı");
 
-            try
-            {
-                await tedarikService.SiparisiTedarikSitesineGonder(orderCode);
-                return Ok(new { success = true, message = "Sipariş Otosticker'a gönderildi." });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = ex.Message });
-            }
-        }
+        //     try
+        //     {
+        //         await tedarikService.SiparisiTedarikSitesineGonder(orderCode);
+        //         return Ok(new { success = true, message = "Sipariş Otosticker'a gönderildi." });
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         return StatusCode(500, new { success = false, message = ex.Message });
+        //     }
+        // }
 
 
 
@@ -1564,6 +1592,17 @@ var trendyolService = _trendyolService;
                 var putBody = await putResponse.Content.ReadAsStringAsync();
                 Console.WriteLine($"Trendyol PUT status: {(int)putResponse.StatusCode}, body: {putBody}");
 
+                if (putBody.Contains("statusnoteligible", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Ok(new
+                    {
+                        success = false,
+                        message = "Trendyol kargo firması değişimini henüz kabul etmiyor. Lütfen 5 dakika sonra tekrar deneyin.",
+                        trendyolResponse = putBody
+                    });
+                }
+
+                // Diğer başarısız durumlar
                 if (!putResponse.IsSuccessStatusCode)
                 {
                     return StatusCode((int)putResponse.StatusCode, new
@@ -1573,6 +1612,7 @@ var trendyolService = _trendyolService;
                         trendyolResponse = putBody
                     });
                 }
+
 
                 // 🔹 Sipariş numarasını bulalım (packageId değil)
                 var siparis = await _appDbContext.Siparisler

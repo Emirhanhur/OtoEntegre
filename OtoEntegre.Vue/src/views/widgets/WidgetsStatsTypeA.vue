@@ -27,13 +27,13 @@ onMounted(() => {
       <CWidgetStatsA color="primary">
         <template #value
           >26K
-          <span class="fs-6 fw-normal"> (-12.4% <CIcon icon="cil-arrow-bottom" />) </span>
+          <span class="fs-6 fw-normal"> (-12.4% <span class="material-icons align-middle">arrow_downward</span>) </span>
         </template>
         <template #title>Users</template>
         <template #action>
           <CDropdown placement="bottom-end">
-            <CDropdownToggle color="transparent" class="p-0 text-white" :caret="false">
-              <CIcon icon="cil-options" class="text-white" />
+              <CDropdownToggle color="transparent" class="p-0 text-white" :caret="false">
+              <span class="material-icons text-white">more_vert</span>
             </CDropdownToggle>
             <CDropdownMenu>
               <CDropdownItem href="#">Action</CDropdownItem>
@@ -111,13 +111,13 @@ onMounted(() => {
       <CWidgetStatsA color="info">
         <template #value
           >$6.200
-          <span class="fs-6 fw-normal"> (40.9% <CIcon icon="cil-arrow-top" />) </span>
+          <span class="fs-6 fw-normal"> (40.9% <span class="material-icons align-middle">arrow_upward</span>) </span>
         </template>
         <template #title>Income</template>
         <template #action>
           <CDropdown placement="bottom-end">
-            <CDropdownToggle color="transparent" class="p-0 text-white" :caret="false">
-              <CIcon icon="cil-options" class="text-white" />
+              <CDropdownToggle color="transparent" class="p-0 text-white" :caret="false">
+              <span class="material-icons text-white">more_vert</span>
             </CDropdownToggle>
             <CDropdownMenu>
               <CDropdownItem href="#">Action</CDropdownItem>
@@ -194,13 +194,13 @@ onMounted(() => {
       <CWidgetStatsA color="warning">
         <template #value
           >2.49%
-          <span class="fs-6 fw-normal"> (84.7% <CIcon icon="cil-arrow-top" />) </span>
+          <span class="fs-6 fw-normal"> (84.7% <span class="material-icons align-middle">arrow_upward</span>) </span>
         </template>
         <template #title>Conversion Rate</template>
         <template #action>
           <CDropdown placement="bottom-end">
-            <CDropdownToggle color="transparent" class="p-0 text-white" :caret="false">
-              <CIcon icon="cil-options" class="text-white" />
+              <CDropdownToggle color="transparent" class="p-0 text-white" :caret="false">
+              <span class="material-icons text-white">more_vert</span>
             </CDropdownToggle>
             <CDropdownMenu>
               <CDropdownItem href="#">Action</CDropdownItem>
@@ -264,13 +264,13 @@ onMounted(() => {
       <CWidgetStatsA color="danger">
         <template #value
           >44K
-          <span class="fs-6 fw-normal"> (-23.6% <CIcon icon="cil-arrow-bottom" />) </span>
+          <span class="fs-6 fw-normal"> (-23.6% <span class="material-icons align-middle">arrow_downward</span>) </span>
         </template>
         <template #title>Sessions</template>
         <template #action>
           <CDropdown placement="bottom-end">
-            <CDropdownToggle color="transparent" class="p-0 text-white" :caret="false">
-              <CIcon icon="cil-options" class="text-white" />
+              <CDropdownToggle color="transparent" class="p-0 text-white" :caret="false">
+              <span class="material-icons text-white">more_vert</span>
             </CDropdownToggle>
             <CDropdownMenu>
               <CDropdownItem href="#">Action</CDropdownItem>

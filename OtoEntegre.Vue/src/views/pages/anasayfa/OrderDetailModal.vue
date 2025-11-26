@@ -57,9 +57,9 @@ export default {
     <div v-if="show" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, 0.5);">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content shadow-lg border-0 rounded-4">
-                <div class="modal-header bg-primary text-white rounded-top-4">
+                    <div class="modal-header bg-primary text-white rounded-top-4">
                     <h5 class="modal-title fw-bold">
-                        <i class="bi bi-receipt me-2"></i> Sipariş Detayı
+                        <span class="material-icons me-2 align-middle">receipt</span> Sipariş Detayı
                     </h5>
                     <button type="button" class="btn-close btn-close-white" @click="$emit('close')"></button>
                 </div>
@@ -93,8 +93,8 @@ export default {
                     </div>
 
                     <!-- Müşteri Bilgileri -->
-                    <div class="p-3 mb-3 rounded border">
-                        <h6 class="fw-bold mb-2"><i class="bi bi-person me-1"></i> Müşteri Bilgileri</h6>
+                        <div class="p-3 mb-3 rounded border">
+                        <h6 class="fw-bold mb-2"><span class="material-icons align-middle me-1">person</span> Müşteri Bilgileri</h6>
                         <div class="row">
                             <div class="col-md-4">
                                 <small class="text-muted d-block">Ad Soyad</small>
@@ -113,14 +113,14 @@ export default {
 
                     <!-- Adresler -->
                     <div class="p-3 mb-3 rounded border bg-white">
-                        <h6 class="fw-bold mb-2"><i class="bi bi-geo-alt me-1"></i> Teslimat Adresi</h6>
+                        <h6 class="fw-bold mb-2"><span class="material-icons align-middle me-1">place</span> Teslimat Adresi</h6>
                         <p class="mb-0">
                             {{ order.customer.delivery.address }},
                             {{ order.customer.delivery.district }},
                             {{ order.customer.delivery.city }}
                         </p>
                         <hr class="my-2">
-                        <h6 class="fw-bold mb-2"><i class="bi bi-receipt me-1"></i> Fatura Adresi</h6>
+                        <h6 class="fw-bold mb-2"><span class="material-icons align-middle me-1">receipt</span> Fatura Adresi</h6>
                         <p class="mb-0">
                             {{ order.customer.invoice.address }},
                             {{ order.customer.invoice.district }},
@@ -129,7 +129,7 @@ export default {
                     </div>
 
                     <!-- Ürün Tablosu -->
-                    <h6 class="fw-bold mb-2"><i class="bi bi-box-seam me-1"></i> Ürünler</h6>
+                    <h6 class="fw-bold mb-2"><span class="material-icons align-middle me-1">inventory_2</span> Ürünler</h6>
                     <div class="table-responsive shadow-sm rounded">
                         <table class="table table-bordered table-hover align-middle">
                             <thead class="table-primary">

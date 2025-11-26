@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -27,6 +28,8 @@ namespace OtoEntegre.Api.Entities
 
         [Column("line_id")]
 public long? LineId { get; set; }
+
+[JsonIgnore]
 
         public Siparisler Siparis { get; set; } = null!;
         public Urunler Urun { get; set; } = null!;

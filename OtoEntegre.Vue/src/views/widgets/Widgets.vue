@@ -268,30 +268,30 @@ const widgetStatsE = {
       <DocsExample href="components/widgets.html#widgetstatsf">
         <CRow :xs="{ gutter: 4 }">
           <CCol :sm="6" :xl="4" :xxl="3">
-            <CWidgetStatsF color="primary" title="Title" value="$1.999,50">
+                <CWidgetStatsF color="primary" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-settings" size="xl" />
+                <span class="material-icons" style="font-size:36px">settings</span>
               </template>
             </CWidgetStatsF>
           </CCol>
           <CCol :sm="6" :xl="4" :xxl="3">
             <CWidgetStatsF color="info" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-user" size="xl" />
+                <span class="material-icons" style="font-size:36px">person</span>
               </template>
             </CWidgetStatsF>
           </CCol>
           <CCol :sm="6" :xl="4" :xxl="3">
             <CWidgetStatsF color="warning" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-moon" size="xl" />
+                <span class="material-icons" style="font-size:36px">dark_mode</span>
               </template>
             </CWidgetStatsF>
           </CCol>
           <CCol :sm="6" :xl="4" :xxl="3">
             <CWidgetStatsF color="danger" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-bell" size="xl" />
+                <span class="material-icons" style="font-size:36px">notifications</span>
               </template>
             </CWidgetStatsF>
           </CCol>
@@ -300,9 +300,9 @@ const widgetStatsE = {
       <DocsExample href="components/widgets.html#widgetstatsf">
         <CRow :xs="{ gutter: 4 }">
           <CCol :sm="6" :xl="4" :xxl="3">
-            <CWidgetStatsF color="primary" title="Title" value="$1.999,50">
+                <CWidgetStatsF color="primary" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-settings" size="xl" />
+                <span class="material-icons" style="font-size:36px">settings</span>
               </template>
               <template #footer>
                 <CLink
@@ -312,7 +312,7 @@ const widgetStatsE = {
                   target="_blank"
                 >
                   View more
-                  <CIcon icon="cil-arrow-right" class="ms-auto" width="16" />
+                  <span class="material-icons ms-auto" style="font-size:16px">arrow_forward</span>
                 </CLink>
               </template>
             </CWidgetStatsF>
@@ -320,7 +320,7 @@ const widgetStatsE = {
           <CCol :sm="6" :xl="4" :xxl="3">
             <CWidgetStatsF color="info" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-user" size="xl" />
+                <span class="material-icons" style="font-size:36px">person</span>
               </template>
               <template #footer>
                 <CLink
@@ -330,7 +330,7 @@ const widgetStatsE = {
                   target="_blank"
                 >
                   View more
-                  <CIcon icon="cil-arrow-right" class="ms-auto" width="16" />
+                  <span class="material-icons ms-auto" style="font-size:16px">arrow_forward</span>
                 </CLink>
               </template>
             </CWidgetStatsF>
@@ -338,7 +338,7 @@ const widgetStatsE = {
           <CCol :sm="6" :xl="4" :xxl="3">
             <CWidgetStatsF color="warning" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-moon" size="xl" />
+                <span class="material-icons" style="font-size:36px">dark_mode</span>
               </template>
               <template #footer>
                 <CLink
@@ -348,7 +348,7 @@ const widgetStatsE = {
                   target="_blank"
                 >
                   View more
-                  <CIcon icon="cil-arrow-right" class="ms-auto" width="16" />
+                  <span class="material-icons ms-auto" style="font-size:16px">arrow_forward</span>
                 </CLink>
               </template>
             </CWidgetStatsF>
@@ -356,7 +356,7 @@ const widgetStatsE = {
           <CCol :sm="6" :xl="4" :xxl="3">
             <CWidgetStatsF color="danger" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-bell" size="xl" />
+                <span class="material-icons" style="font-size:36px">notifications</span>
               </template>
               <template #footer>
                 <CLink
@@ -366,7 +366,7 @@ const widgetStatsE = {
                   target="_blank"
                 >
                   View more
-                  <CIcon icon="cil-arrow-right" class="ms-auto" width="16" />
+                  <span class="material-icons ms-auto" style="font-size:16px">arrow_forward</span>
                 </CLink>
               </template>
             </CWidgetStatsF>
@@ -378,28 +378,28 @@ const widgetStatsE = {
           <CCol :sm="6" :xl="4" :xxl="3">
             <CWidgetStatsF color="primary" :padding="false" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-settings" size="xl" />
+                <span class="material-icons" style="font-size:36px">settings</span>
               </template>
             </CWidgetStatsF>
           </CCol>
           <CCol :sm="6" :xl="4" :xxl="3">
             <CWidgetStatsF color="info" :padding="false" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-user" size="xl" />
+                <span class="material-icons" style="font-size:36px">person</span>
               </template>
             </CWidgetStatsF>
           </CCol>
           <CCol :sm="6" :xl="4" :xxl="3">
             <CWidgetStatsF color="warning" :padding="false" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-moon" size="xl" />
+                <span class="material-icons" style="font-size:36px">dark_mode</span>
               </template>
             </CWidgetStatsF>
           </CCol>
           <CCol :sm="6" :xl="4" :xxl="3">
             <CWidgetStatsF color="danger" :padding="false" title="Title" value="$1.999,50">
               <template #icon>
-                <CIcon icon="cil-bell" size="xl" />
+                <span class="material-icons" style="font-size:36px">notifications</span>
               </template>
             </CWidgetStatsF>
           </CCol>
@@ -411,35 +411,35 @@ const widgetStatsE = {
       <DocsExample href="components/widgets.html#widgetstatsc">
         <CCardGroup>
           <CWidgetStatsC :progress="{ color: 'info', value: 75 }" title="Visitors" value="87.500">
-            <template #icon><CIcon icon="cil-people" height="36" /></template>
+            <template #icon><span class="material-icons" style="font-size:36px">people</span></template>
           </CWidgetStatsC>
           <CWidgetStatsC
             :progress="{ color: 'success', value: 75 }"
             title="New Clients"
             value="385"
           >
-            <template #icon><CIcon icon="cil-user-follow" height="36" /></template>
+            <template #icon><span class="material-icons" style="font-size:36px">person_add</span></template>
           </CWidgetStatsC>
           <CWidgetStatsC
             :progress="{ color: 'warning', value: 75 }"
             title="Products sold"
             value="1238"
           >
-            <template #icon><CIcon icon="cil-basket" height="36" /></template>
+            <template #icon><span class="material-icons" style="font-size:36px">shopping_basket</span></template>
           </CWidgetStatsC>
           <CWidgetStatsC
             :progress="{ color: 'primary', value: 75 }"
             title="Returning Visitors"
             value="28%"
           >
-            <template #icon><CIcon icon="cil-chart-pie" height="36" /></template>
+            <template #icon><span class="material-icons" style="font-size:36px">pie_chart</span></template>
           </CWidgetStatsC>
           <CWidgetStatsC
             :progress="{ color: 'danger', value: 75 }"
             title="Avg. Time"
             value="5:34:11"
           >
-            <template #icon><CIcon icon="cil-speedometer" height="36" /></template>
+            <template #icon><span class="material-icons" style="font-size:36px">speed</span></template>
           </CWidgetStatsC>
         </CCardGroup>
       </DocsExample>
@@ -447,7 +447,7 @@ const widgetStatsE = {
         <CRow :xs="{ gutter: 4 }">
           <CCol :xs="6" :lg="4" :xxl="2">
             <CWidgetStatsC :progress="{ color: 'info', value: 75 }" title="Visitors" value="87.500">
-              <template #icon><CIcon icon="cil-people" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">people</span></template>
             </CWidgetStatsC>
           </CCol>
           <CCol :xs="6" :lg="4" :xxl="2">
@@ -456,7 +456,7 @@ const widgetStatsE = {
               title="New Clients"
               value="385"
             >
-              <template #icon><CIcon icon="cil-user-follow" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">person_add</span></template>
             </CWidgetStatsC>
           </CCol>
           <CCol :xs="6" :lg="4" :xxl="2">
@@ -465,7 +465,7 @@ const widgetStatsE = {
               title="Products sold"
               value="1238"
             >
-              <template #icon><CIcon icon="cil-basket" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">shopping_basket</span></template>
             </CWidgetStatsC>
           </CCol>
           <CCol :xs="6" :lg="4" :xxl="2">
@@ -474,7 +474,7 @@ const widgetStatsE = {
               title="Returning Visitors"
               value="28%"
             >
-              <template #icon><CIcon icon="cil-chart-pie" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">pie_chart</span></template>
             </CWidgetStatsC>
           </CCol>
           <CCol :xs="6" :lg="4" :xxl="2">
@@ -483,12 +483,12 @@ const widgetStatsE = {
               title="Avg. Time"
               value="5:34:11"
             >
-              <template #icon><CIcon icon="cil-speedometer" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">speed</span></template>
             </CWidgetStatsC>
           </CCol>
           <CCol :xs="6" :lg="4" :xxl="2">
             <CWidgetStatsC :progress="{ color: 'info', value: 75 }" title="Comments" value="972">
-              <template #icon><CIcon icon="cil-speech" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">chat_bubble</span></template>
             </CWidgetStatsC>
           </CCol>
         </CRow>
@@ -503,7 +503,7 @@ const widgetStatsE = {
               title="Visitors"
               value="87.500"
             >
-              <template #icon><CIcon icon="cil-people" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">people</span></template>
             </CWidgetStatsC>
           </CCol>
           <CCol :xs="6" :lg="4" :xxl="2">
@@ -514,7 +514,7 @@ const widgetStatsE = {
               title="New Clients"
               value="385"
             >
-              <template #icon><CIcon icon="cil-user-follow" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">person_add</span></template>
             </CWidgetStatsC>
           </CCol>
           <CCol :xs="6" :lg="4" :xxl="2">
@@ -525,7 +525,7 @@ const widgetStatsE = {
               title="Products sold"
               value="1238"
             >
-              <template #icon><CIcon icon="cil-basket" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">shopping_basket</span></template>
             </CWidgetStatsC>
           </CCol>
           <CCol :xs="6" :lg="4" :xxl="2">
@@ -536,7 +536,7 @@ const widgetStatsE = {
               title="Returning Visitors"
               value="28%"
             >
-              <template #icon><CIcon icon="cil-chart-pie" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">pie_chart</span></template>
             </CWidgetStatsC>
           </CCol>
           <CCol :xs="6" :lg="4" :xxl="2">
@@ -547,7 +547,7 @@ const widgetStatsE = {
               title="Avg. Time"
               value="5:34:11"
             >
-              <template #icon><CIcon icon="cil-speedometer" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">speed</span></template>
             </CWidgetStatsC>
           </CCol>
           <CCol :xs="6" :lg="4" :xxl="2">
@@ -558,7 +558,7 @@ const widgetStatsE = {
               title="Comments"
               value="972"
             >
-              <template #icon><CIcon icon="cil-speech" height="36" /></template>
+              <template #icon><span class="material-icons" style="font-size:36px">chat_bubble</span></template>
             </CWidgetStatsC>
           </CCol>
         </CRow>

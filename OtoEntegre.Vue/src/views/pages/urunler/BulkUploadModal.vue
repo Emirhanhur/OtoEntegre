@@ -1,75 +1,4 @@
 <!-- BulkUploadModal.vue -->
-<template>
-    <div class="modal fade" id="bulkUploadModal" tabindex="-1" aria-labelledby="bulkUploadModalLabel"
-        aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="bulkUploadModalLabel">Toplu Ürün Yükleme</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- Kategori Seçimi -->
-                    <div v-for="(cat, level) in categoryPath" :key="level" class="mb-3">
-                        <label class="form-label">
-                            Kategori Seviye {{ level + 1 }} <span class="text-danger">*</span>
-                        </label>
-                        <select class="form-select shadow-sm" v-model="categoryPath[level].id"
-                            @change="handleCategoryChange(level)" required>
-                            <option value="">Seçiniz</option>
-                            <option v-for="sub in getSubCategories(level) || []" :key="sub.id" :value="sub.id">
-                                {{ sub.name }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <!-- Kategori seçildiğinde gösterilecek alan -->
-                    <div v-if="newProduct.categoryId" class="mt-4">
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle me-2"></i>
-                            Seçilen kategoriye ait ürün şablonunu indirerek Excel dosyasını hazırlayabilirsiniz.
-                        </div>
-                        
-                        <div class="d-flex justify-content-center gap-4 py-3">
-                            <button @click="downloadTemplate" class="btn btn-primary">
-                                <i class="bi bi-download me-2"></i>
-                                Ürün Şablonunu İndir
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Excel Yükleme - sadece kategori seçiliyse göster -->
-                    <div v-if="newProduct.categoryId" class="mt-4">
-                        <hr>
-                        <h6 class="mb-3">Excel Dosyası Yükle</h6>
-                        <input type="file" ref="fileInput" class="form-control" accept=".xlsx,.xls"
-                            @change="handleFileChange">
-                        <small class="text-muted d-block mt-2">
-                            Not: İndirdiğiniz şablona uygun hazırlanmış Excel dosyasını yükleyiniz.
-                        </small>
-                    </div>
-
-                    <!-- Hata ve Başarı Mesajları -->
-                    <div v-if="errorMessage" class="alert alert-danger mt-3">
-                        {{ errorMessage }}
-                    </div>
-                    <div v-if="successMessage" class="alert alert-success mt-3">
-                        {{ successMessage }}
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
-                    <button v-if="selectedFile" type="button" class="btn btn-primary" @click="uploadProducts"
-                        :disabled="isUploading">
-                        <span v-if="isUploading" class="spinner-border spinner-border-sm me-2"></span>
-                        Ürünleri Yükle
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</template>
-
 <script>
 import { Modal } from 'bootstrap';
 import api from '../../axios';
@@ -78,12 +7,15 @@ export default {
     name: 'BulkUploadModal',
     data() {
         return {
-           successMessage: "", // ✅ alert için eklendi
+            successMessage: "", // ✅ alert için eklendi
             brands: [],
             subCategories: [],
             selectedAttributes: {},
             successMessage: "",
             categories: [],
+            errorMessage: "",          // ✅ ekleyin
+            selectedFile: null,        // ✅ ekleyin
+            isUploading: false,        // yükleme spinner için
             newProduct: {
                 title: "",
                 categoryId: null,
@@ -111,9 +43,9 @@ export default {
                 }
                 return null;
             };
-            
-            return this.newProduct.categoryId ? 
-                findCategoryName(this.categories, this.newProduct.categoryId) : 
+
+            return this.newProduct.categoryId ?
+                findCategoryName(this.categories, this.newProduct.categoryId) :
                 null;
         }
     },
@@ -121,7 +53,7 @@ export default {
         this.loadCategories();
     },
     methods: {
-       
+
 
         async loadCategories() {
             try {
@@ -145,53 +77,23 @@ export default {
             }
 
             try {
-                // Kategori özelliklerini al
-                const categoryAttrs = this.categoryAttributes;
-                
-                // Excel şablonu için gerekli kolonları hazırla
-                const columns = [
-                    { header: 'Barkod (*)' }, // barcode
-                    { header: 'Ürün Adı (*)' }, // title
-                    { header: 'Stok Adedi (*)' }, // quantity
-                    { header: 'KDV Oranı (*)' }, // vatRate
-                    { header: 'Satış Fiyatı (*)' }, // salePrice
-                    { header: 'Liste Fiyatı (Piyasa)' }, // listPrice
-                    { header: 'Marka (*)' }, // brand
-                    { header: 'Garanti Süresi (Ay)' }, // warrantyPeriod
-                    { header: 'Ürün Açıklaması' }, // description
-                    { header: 'Resim URL 1 (*)' }, // images
-                    { header: 'Resim URL 2' },
-                    { header: 'Resim URL 3' },
-                    { header: 'Resim URL 4' },
-                    { header: 'Resim URL 5' },
-                    { header: 'Desi' }, // dimensionalWeight
-                    { header: 'Model' }, // brandId
-                    { header: 'Renk' }, // color
-                    { header: 'Ürün Video URL' }, // videoUrl
-                    { header: 'Sevkiyat Süresi (Gün)' }, // shipmentTime
-                    { header: 'Stok Kodu' }, // stockCode
-                ];
+                const requestBody = {
+                    CategoryId: this.newProduct.categoryId,
+                    Columns: this.categoryAttributes.map(attr => ({
+                        Header: attr.required ? `${attr.name} (*)` : attr.name
+                    }))
+                };
 
-                // Kategori özelliklerini kolonlara ekle
-                categoryAttrs.forEach(attr => {
-                    const header = attr.required ? 
-                        `${attr.name} (*)` : 
-                        attr.name;
-                    columns.push({ header });
-                });
-
-                // Excel dosyasını oluştur
-               const validColumns = columns.filter(c => c.header && c.header.trim() !== '');
-
-await api.post('/api/trendyol/download-template', {
-  categoryId: this.newProduct.categoryId,
-  columns: validColumns
-}, { responseType: 'blob' });
+                const response = await api.post(
+                    `/api/Urunler/trendyol/download-template/${this.newProduct.categoryId}`,
+                    requestBody,
+                    { responseType: 'blob' }
+                );
 
                 const url = window.URL.createObjectURL(new Blob([response.data]));
                 const link = document.createElement('a');
                 link.href = url;
-                link.setAttribute('download', `trendyol-urun-sablonu-${this.newProduct.categoryId}.xlsx`);
+                link.setAttribute('download', `trendyol-urun-sablonu-${this.newProduct.categoryId}.csv`);
                 document.body.appendChild(link);
                 link.click();
                 link.remove();
@@ -199,7 +101,9 @@ await api.post('/api/trendyol/download-template', {
                 console.error('Şablon indirilirken hata:', error);
                 this.errorMessage = 'Şablon indirilemedi';
             }
-        },
+        }
+
+        ,
 
         async uploadProducts() {
             if (!this.newProduct.categoryId) {
@@ -326,6 +230,78 @@ await api.post('/api/trendyol/download-template', {
     }
 };
 </script>
+
+<template>
+    <div class="modal fade" id="bulkUploadModal" tabindex="-1" aria-labelledby="bulkUploadModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bulkUploadModalLabel">Toplu Ürün Yükleme</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Kategori Seçimi -->
+                    <div v-for="(cat, level) in categoryPath" :key="level" class="mb-3">
+                        <label class="form-label">
+                            Kategori Seviye {{ level + 1 }} <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select shadow-sm" v-model="categoryPath[level].id"
+                            @change="handleCategoryChange(level)" required>
+                            <option value="">Seçiniz</option>
+                            <option v-for="sub in getSubCategories(level) || []" :key="sub.id" :value="sub.id">
+                                {{ sub.name }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Kategori seçildiğinde gösterilecek alan -->
+                    <div v-if="newProduct.categoryId" class="mt-4">
+                        <div class="alert alert-info">
+                            <span class="material-icons me-2 align-middle">info</span>
+                            Seçilen kategoriye ait ürün şablonunu indirerek Excel dosyasını hazırlayabilirsiniz.
+                        </div>
+
+                        <div class="d-flex justify-content-center gap-4 py-3">
+                            <button @click="downloadTemplate" class="btn btn-primary">
+                                <span class="material-icons me-2 align-middle">download</span>
+                                Ürün Şablonunu İndir
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Excel Yükleme - sadece kategori seçiliyse göster -->
+                    <div v-if="newProduct.categoryId" class="mt-4">
+                        <hr>
+                        <h6 class="mb-3">Excel Dosyası Yükle</h6>
+                        <input type="file" ref="fileInput" class="form-control" accept=".xlsx,.xls"
+                            @change="handleFileChange">
+                        <small class="text-muted d-block mt-2">
+                            Not: İndirdiğiniz şablona uygun hazırlanmış Excel dosyasını yükleyiniz.
+                        </small>
+                    </div>
+
+                    <!-- Hata ve Başarı Mesajları -->
+                    <div v-if="errorMessage" class="alert alert-danger mt-3">
+                        {{ errorMessage }}
+                    </div>
+                    <div v-if="successMessage" class="alert alert-success mt-3">
+                        {{ successMessage }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                    <button v-if="selectedFile" type="button" class="btn btn-primary" @click="uploadProducts"
+                        :disabled="isUploading">
+                        <span v-if="isUploading" class="spinner-border spinner-border-sm me-2"></span>
+                        Ürünleri Yükle
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
 
 <style scoped>
 .modal-content {

@@ -43,7 +43,8 @@ namespace OtoEntegre.Api.Entities
                 [Column("updated_at")]
                 public DateTime Updated_At { get; set; } = DateTime.UtcNow;
 
-
+ [Column("hp_seller_id")]
+                public int? Hp_Seller_Id { get; set; }
 
                 public KULLANICILAR? Kullanici { get; set; }
 

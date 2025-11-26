@@ -235,9 +235,9 @@ export default {
             </td>
             <td>{{ formatOrderDate(order.createdAt) }}</td>
             <td>{{ formatMoney(order.toplamTutar, "TRY") }}</td>
-            <td class="text-center">
+              <td class="text-center">
               <span v-if="order.telegramSent" class="text-success">
-                <i class="bi bi-check-circle-fill"></i>
+                <span class="material-icons">check_circle</span>
               </span>
               <button v-else class="btn btn-primary btn-sm" @click="sendTelegram(order.id)">
                 Gönder
@@ -245,15 +245,15 @@ export default {
             </td>
             <td class="text-center">
               <button class="btn btn-outline-primary btn-sm" @click="openDetailModal(order)">
-                <i class="bi bi-eye"></i>
+                <span class="material-icons">visibility</span>
               </button>
             </td>
           </tr>
         </tbody> 
         <tfoot v-if="paginatedOrders.length < 1">
           <tr>
-            <td colspan="8" class="text-center py-4 text-secondary">
-              <i class="fas fa-inbox fs-1 mb-2"></i>
+              <td colspan="8" class="text-center py-4 text-secondary">
+              <span class="material-icons fs-1 mb-2 align-middle">inbox</span>
               <p>{{ selectedStatus ? 'Bu durumda sipariş bulunmuyor' : 'Henüz sipariş yok' }}</p>
             </td>
           </tr>

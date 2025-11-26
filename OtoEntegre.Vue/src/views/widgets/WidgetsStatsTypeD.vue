@@ -40,7 +40,7 @@ const options = {
           { title: 'feeds', value: '459' },
         ]"
       >
-        <template #icon><CIcon icon="cib-facebook" height="52" class="my-4 text-white" /></template>
+        <template #icon><span class="material-icons my-4 text-white" style="font-size:52px">public</span></template>
         <template #chart>
           <CChart
             class="position-absolute w-100 h-100"
@@ -71,7 +71,7 @@ const options = {
           { title: 'tweets', value: '1.792' },
         ]"
       >
-        <template #icon><CIcon icon="cib-twitter" height="52" class="my-4 text-white" /></template>
+        <template #icon><span class="material-icons my-4 text-white" style="font-size:52px">public</span></template>
         <template #chart>
           <CChart
             class="position-absolute w-100 h-100"
@@ -102,7 +102,7 @@ const options = {
           { title: 'feeds', value: '1.292' },
         ]"
       >
-        <template #icon><CIcon icon="cib-linkedin" height="52" class="my-4 text-white" /></template>
+        <template #icon><span class="material-icons my-4 text-white" style="font-size:52px">public</span></template>
         <template #chart>
           <CChart
             class="position-absolute w-100 h-100"
@@ -133,7 +133,7 @@ const options = {
           { title: 'meetings', value: '4' },
         ]"
       >
-        <template #icon><CIcon icon="cil-calendar" height="52" class="my-4 text-white" /></template>
+        <template #icon><span class="material-icons my-4 text-white" style="font-size:52px">calendar_today</span></template>
         <template #chart>
           <CChart
             class="position-absolute w-100 h-100"

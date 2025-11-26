@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations; // ForeignKey attribute burada var
@@ -28,8 +29,8 @@ namespace OtoEntegre.Api.Entities
         [Column("kargo_takip_numarasi")]
         public string KargoTakipNumarasi { get; set; } = string.Empty;
 
-        
-         [Column("kargo_firma_adi")]
+
+        [Column("kargo_firma_adi")]
         public string CargoProviderName { get; set; } = string.Empty;
 
         [Column("paket_numarasi")]
@@ -39,7 +40,7 @@ namespace OtoEntegre.Api.Entities
         public string OdemeDurumu { get; set; } = string.Empty;
 
         [Column("durum")]
-        public string Durum { get; set; }= string.Empty;
+        public string Durum { get; set; } = string.Empty;
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -63,11 +64,17 @@ namespace OtoEntegre.Api.Entities
         [Column("telegram_sent")]
         public bool TelegramSent { get; set; } = false;
 
+        [Column("telegram_message_id")]
+        public int? TelegramMessageId { get; set; }
+
+        [Column("telegram_chat_id")]
+        public string? TelegramChatId { get; set; }
+
         [Column("okundu")]
         public bool Okundu { get; set; } = false;
 
         [Column("geldigi_yer")]
-        public int GeldigiYer { get; set; } 
+        public int GeldigiYer { get; set; }
 
         [Column("tedarik_sent")]
         public bool TedarikSent { get; set; } = false;
@@ -84,7 +91,7 @@ namespace OtoEntegre.Api.Entities
         [Column("renk")]
         public string Renk { get; set; } = string.Empty;
 
-        
+
 
         [Column("beden")]
         public string Beden { get; set; } = string.Empty;
@@ -98,15 +105,20 @@ namespace OtoEntegre.Api.Entities
         [Column("cancelled_notified")]
         public bool? CancelledNotified { get; set; } = false;
 
-public bool? DelayNotified { get; set; } = false;
-[NotMapped]
-    public int? SellerId { get; set; } 
-    public ICollection<SiparisUrunleri> SiparisUrunleri { get; set; } = new List<SiparisUrunleri>();
+        [Column("trendyol_siparis_id")]
+
+        public long? TrendyolSiparisId { get; set; }
+
+        public bool? DelayNotified { get; set; } = false;
+        [NotMapped]
+        public int? SellerId { get; set; }
+        public ICollection<SiparisUrunleri> SiparisUrunleri { get; set; } = new List<SiparisUrunleri>();
 
 
         [ForeignKey(nameof(EntegrasyonId))]
         public Entegrasyonlar? Entegrasyonlar { get; set; }
 
+        [JsonIgnore]
 
         public Dealer? Dealer { get; set; }
     }

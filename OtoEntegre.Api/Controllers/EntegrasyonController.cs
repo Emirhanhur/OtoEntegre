@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OtoEntegre.Api.DTOs;
@@ -59,6 +60,45 @@ namespace OtoEntegre.Api.Controllers
             _urunlerRepo = urunlerRepo;
             _env = env;
             _pdfLabelService = pdfLabelService;
+        }
+
+        [HttpPost("send-iptal-telegram/{orderId}")]
+        public async Task<IActionResult> SendIptalTelegram(Guid orderId)
+        {
+            Console.WriteLine($"SendIptalTelegram başladı {orderId}");
+            var siparis = await _dbContext.Siparisler
+                .FirstOrDefaultAsync(s => s.Id == orderId);
+
+            if (siparis == null)
+                return NotFound(new { sent = false, error = "Sipariş bulunamadı." });
+
+            if (!siparis.KullaniciId.HasValue)
+                return BadRequest(new { sent = false, error = "Siparişin kullanıcı bilgisi yok." });
+
+            if (!siparis.TelegramMessageId.HasValue)
+                return BadRequest(new { sent = false, error = "Önceki Telegram mesajı bulunamadı." });
+
+            var message = $"⚠️⚠️⚠️ *Sipariş İptal Edildi*\n📦 Sipariş No: {siparis.SiparisNumarasi} \nMüşteri: {siparis.MusteriAdSoyad}";
+
+            try
+            {
+                var sent = await _telegramService.SendReplyMessageAsync(siparis.KullaniciId, message, siparis.TelegramMessageId.Value);
+                if (sent)
+                {
+                    siparis.CancelledNotified = true;
+                    await _repo.SaveAsync();
+                    return Ok(new { sent = true });
+                }
+                else
+                {
+                    return StatusCode(500, new { sent = false, error = "Telegram gönderimi başarısız." });
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("SendIptalTelegram hata: " + ex.Message);
+                return StatusCode(500, new { sent = false, error = ex.Message });
+            }
         }
 
         [HttpPost]
@@ -313,13 +353,17 @@ namespace OtoEntegre.Api.Controllers
         //          }
 
 
+
+
         [HttpPost("send-siparis-telegram/{orderId}")]
         public async Task<IActionResult> SendSiparisTelegram(Guid orderId)
         {
             Console.WriteLine($"SendSiparisTelegram başladı {orderId}");
             var siparis = await _dbContext.Siparisler
-                .Include(s => s.Entegrasyonlar)
-                .FirstOrDefaultAsync(s => s.Id == orderId);
+     .Include(s => s.Entegrasyonlar)
+     .Include(s => s.SiparisUrunleri)                 // ürünleri dahil et
+         .ThenInclude(su => su.Urun)                  // ürün bilgileriyle birlikte
+     .FirstOrDefaultAsync(s => s.Id == orderId);
 
             if (siparis == null)
                 return NotFound();
@@ -327,8 +371,66 @@ namespace OtoEntegre.Api.Controllers
             if (siparis.Entegrasyonlar == null)
                 return BadRequest(new { sent = false, error = "Entegrasyon bilgisi bulunamadı." });
 
+            var entegrasyon = siparis.Entegrasyonlar;
+            if (entegrasyon == null)
+                return BadRequest("Entegrasyon bilgisi bulunamadı.");
+
+            if (!entegrasyon.Seller_Id.HasValue ||
+                string.IsNullOrWhiteSpace(entegrasyon.Api_Key) ||
+                string.IsNullOrWhiteSpace(entegrasyon.Api_Secret))
+            {
+                return BadRequest("Trendyol entegrasyon bilgileri eksik veya hatalı.");
+            }
+
+            var sellerId = entegrasyon.Seller_Id.Value;
+            var apiKey = entegrasyon.Api_Key.Trim();
+            var apiSecret = entegrasyon.Api_Secret.Trim();
+
+            var httpClient = _httpClientFactory.CreateClient();
+            var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{apiKey}:{apiSecret}"));
+            var orderNumber = siparis.SiparisNumarasi;
+
+            // 🔍 Debug log ekle (yetkilendirme ve URL bilgisi)
+            Console.WriteLine("🔎 Trendyol istek bilgileri:");
+            Console.WriteLine($"   📦 SellerId      : {sellerId}");
+            Console.WriteLine($"   🔑 ApiKey        : {apiKey}");
+            Console.WriteLine($"   🧩 ApiSecret     : {apiSecret.Substring(0, Math.Min(4, apiSecret.Length))}**** (maskelendi)");
+            Console.WriteLine($"   🌐 Request URL   : https://apigw.trendyol.com/integration/order/sellers/{sellerId}/orders?orderNumber={orderNumber}");
+            Console.WriteLine($"   🪶 Authorization : Basic {auth.Substring(0, 10)}**** (base64 maskelendi)");
+
             try
             {
+                var getUrl = $"https://apigw.trendyol.com/integration/order/sellers/{sellerId}/orders?orderNumber={orderNumber}";
+                var getRequest = new HttpRequestMessage(HttpMethod.Get, getUrl);
+                getRequest.Headers.Authorization = new AuthenticationHeaderValue("Basic", auth);
+                getRequest.Headers.Add("User-Agent", "MyAppIntegration/1.0");
+
+                var getResponse = await httpClient.SendAsync(getRequest);
+                var getBody = await getResponse.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"📦 Trendyol yanıtı: {(int)getResponse.StatusCode} - {getBody}");
+
+                if (!getResponse.IsSuccessStatusCode)
+                {
+                    return Ok(new
+                    {
+                        success = false,
+                        message = "Trendyol sipariş doğrulaması başarısız.",
+                        trendyolResponse = getBody
+                    });
+                }
+
+                if (string.IsNullOrWhiteSpace(getBody) || !getBody.Contains(orderNumber))
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Trendyol'da bu sipariş bulunamadı.",
+                        trendyolResponse = getBody
+                    });
+                }
+
+                Console.WriteLine("✅ Trendyol siparişi doğrulandı, Telegram gönderimi başlatılıyor...");
                 var kullaniciId = siparis.KullaniciId;
                 if (!kullaniciId.HasValue)
                     return BadRequest(new { sent = false, error = "Siparişin kullanıcı bilgisi yok." });
@@ -352,7 +454,8 @@ namespace OtoEntegre.Api.Controllers
                                            siparis.Renk,
                                            siparis.Beden,
                                            su.MerchantSku,
-                                           su.SiparisNotu
+                                           su.SiparisNotu,
+                                           u.UrunTedarikBarcode
                                        }).Distinct().ToListAsync();
                 Console.WriteLine($"sipariş stok kodu = {string.Join(", ", urunlerDb.Select(u => u.MerchantSku))}");
 
@@ -367,7 +470,7 @@ namespace OtoEntegre.Api.Controllers
             Beden: string.IsNullOrWhiteSpace(u.Beden) ? "-" : u.Beden,
             Barkod: u.ProductCode?.ToString() ?? "-",
             StokKodu: u.ProductCode?.ToString() ?? "-",
-            MerchantSku: u.MerchantSku ?? "-", 
+            MerchantSku: u.MerchantSku ?? "-",
             SiparisNotu: _dbContext.SiparisUrunleri
                 .Where(x => x.Siparis_Id == siparis.Id && x.Urun_Id == u.UrunId)
                 .Select(x => x.SiparisNotu)
@@ -379,21 +482,41 @@ namespace OtoEntegre.Api.Controllers
 
 
                 // Telegram mesajı
+                bool storedMessageId = false;
                 foreach (var urun in urunlerDb)
                 {
                     var messageBuilder = new StringBuilder();
                     if (urun.Adet > 1)
                         messageBuilder.AppendLine($"{urun.Adet} adet");
 
-
                     var imageUrl = !string.IsNullOrWhiteSpace(urun.Image)
                         ? urun.Image
                         : "https://dummyimage.com/600x400/cccccc/000000&text=Sipariş+Resmi";
 
-                    var sent = await _telegramService.SendOrderMessageAsync(guidKullanici, messageBuilder.ToString(), imageUrl);
+                    if (!storedMessageId)
+                    {
+                        // İlk gönderimden dönen message_id ve chat_id'yi sakla
+                        var result = await _telegramService.SendOrderMessageWithResultAsync(guidKullanici, messageBuilder.ToString(), imageUrl);
+                        if (!result.success)
+                            return StatusCode(500, new { sent = false, error = "Telegram gönderimi başarısız." });
 
-                    if (!sent)
-                        return StatusCode(500, new { sent = false, error = "Telegram gönderimi başarısız." });
+                        if (result.messageId.HasValue)
+                        {
+                            siparis.TelegramMessageId = result.messageId.Value;
+                        }
+                        if (!string.IsNullOrWhiteSpace(result.chatId))
+                        {
+                            siparis.TelegramChatId = result.chatId;
+                        }
+                        storedMessageId = true;
+                        await _repo.SaveAsync();
+                    }
+                    else
+                    {
+                        var sent = await _telegramService.SendOrderMessageAsync(guidKullanici, messageBuilder.ToString(), imageUrl);
+                        if (!sent)
+                            return StatusCode(500, new { sent = false, error = "Telegram gönderimi başarısız." });
+                    }
                 }
 
 
@@ -442,9 +565,10 @@ namespace OtoEntegre.Api.Controllers
 
                 var template = candidates.FirstOrDefault(System.IO.File.Exists) ?? string.Empty;
                 if (string.IsNullOrEmpty(template))
-                    throw new FileNotFoundException("PDF şablonu bulunamadı", string.Join(", ", filenames));
+                    throw new FileNotFoundException("PDF şablonu bulunamadı EntegrasyonController", string.Join(", ", filenames));
 
                 var outputDir = Path.Combine(_env.ContentRootPath, "labels");
+
 
                 // PDF oluştur
                 var generatedPdf = await _pdfLabelService.GenerateFromTemplateAsync(
@@ -492,9 +616,199 @@ namespace OtoEntegre.Api.Controllers
                     var notMesaji = "📝 *Sipariş Notları:*\n" + string.Join("\n", urunNotlari);
                     await _telegramService.SendOrderMessageAsync(siparis.KullaniciId, notMesaji);
                 }
+              var pdfBytes = await System.IO.File.ReadAllBytesAsync(generatedPdf);
 
-                await _telegramService.SendDocumentAsync($"{siparis.MusteriAdSoyad}", generatedPdf, kullaniciId);
+var pdfSent = await _telegramService.SendDocumentAsync(
+    caption: $"{siparis.MusteriAdSoyad}",
+    fileBytes: pdfBytes,
+    userId: kullaniciId,
+    fileName: $"{siparis.MusteriAdSoyad}.pdf"
+);
+
+if (!pdfSent)
+{
+    return StatusCode(500, new { sent = false, error = "PDF Telegram'a gönderilemedi." });
+}
+
                 await _telegramService.SendOrderMessageAsync(siparis.KullaniciId, "-----------------");
+
+
+                //OTOSTİCKERDAN SATIN ALIM
+                //             var user = await _dbContext.Kullanicilar.FirstOrDefaultAsync(u => u.Id == siparis.KullaniciId);
+                //             if (user == null)
+                //             {
+                //                 Console.WriteLine("Kullanıcı bulunamadı, OtoSticker gönderimi atlandı.");
+                //             }
+                //             else
+                //             {
+                //                 // 🔹 Otosticker bayi listesini çek (kullanıcının e-postası ile eşleştir)
+                //                 var dealerListResponse = await _otostickerService.GetDealerListAsync();
+                //                 var dealer = dealerListResponse?.Result?.List?
+                //                     .FirstOrDefault(d => d.Email.Trim().Equals(user.Email.Trim(), StringComparison.OrdinalIgnoreCase));
+
+                //                 if (dealer == null)
+                //                 {
+                //                     Console.WriteLine($"OtoSticker bayi bulunamadı: {user.Email}");
+                //                     await _telegramService.SendOrderMessageAsync(user.Id, $"⚠️ OtoSticker bayi bulunamadı: {user.Email}");
+                //                 }
+                //                 else
+                //                 {
+                //                     // 🔹 Sipariş ürünlerini getir ve urun_tedarik_barcode üzerinden barcode eşleştir
+                //                     var urunler = await (from su in _dbContext.SiparisUrunleri
+                //                                          join u in _dbContext.Urunler on su.Urun_Id equals u.Id
+                //                                          where su.Siparis_Id == siparis.Id
+                //                                          select new
+                //                                          {
+                //                                              u.Id,
+                //                                              UrunTedarikBarcode = u.UrunTedarikBarcode, // barcode eşleşmesi
+                //                                              su.Adet,
+                //                                              su.Toplam_Fiyat,
+                //                                          })
+                //                                          .Select(x => new
+                //                                          {
+                //                                              Id = x.Id,
+                //                                              Barcode = x.UrunTedarikBarcode,
+                //                                              x.Adet,
+                //                                              Fiyat = x.Toplam_Fiyat,
+                //                                          })
+                //                                          .ToListAsync();
+
+                //                     if (urunler.Count == 0)
+                //                     {
+                //                         Console.WriteLine("Siparişe ait ürün bulunamadı.");
+                //                         await _telegramService.SendOrderMessageAsync(user.Id, "⚠️ Siparişe ait ürün bulunamadı.");
+                //                     }
+                //                     else
+                //                     {
+                //                         // 🔹 OtoSticker fastSale isteği
+                //                         var productList = new List<object>();
+
+                //                         foreach (var urun in siparis.SiparisUrunleri)
+                //                         {
+                //                             // Barkoddan ürün ID al
+                //                             var barcode = urun.Urun?.UrunTedarikBarcode;
+                //                             if (string.IsNullOrWhiteSpace(barcode))
+                //                             {
+                //                                 Console.WriteLine($"⚠️ Ürünün barkodu yok: {urun.Urun?.Ad}");
+                //                                 continue;
+                //                             }
+
+                //                             var otoProduct = await _otostickerService.GetProductByBarcodeAsync(barcode);
+
+                //                             decimal? otoPrice = otoProduct?.SalePrice;
+                //                             Console.WriteLine($"OtoSticker fiyatı (barcode={barcode}): {otoPrice}");
+
+                //                             if (!otoPrice.HasValue)
+                //                             {
+                //                                 Console.WriteLine($"⚠️ OtoSticker fiyatı bulunamadı, varsayılan 0 kullanılıyor (barcode={barcode})");
+                //                                 otoPrice = 0;
+                //                             }
+
+                //                             productList.Add(new
+                //                             {
+                //                                 id = otoProduct?.ProductId,
+                //                                 price = otoPrice,
+                //                                 quantity = urun.Adet,
+                //                                 variant1 = siparis.Renk ?? ""
+                //                             });
+
+                //                         }
+
+
+                //                         // FastSale JSON
+                //                         var fastSaleRequest = new
+                //                         {
+                //                             customer = new
+                //                             {
+                //                                 ID = user.Tedarik_Kullanici_Id,
+                //                                 email = dealer.Email,
+                //                                 name = dealer.Name,
+                //                                 lastname = dealer.Lastname,
+                //                                 code = dealer.Code,
+                //                                 title = dealer.Title,
+                //                                 group = dealer.Group,
+                //                                 status = dealer.Status,
+                //                                 balance = dealer.Balance,
+                //                                 discount = dealer.Discount,
+                //                                 nationalId = dealer.NationalId,
+                //                                 taxId = dealer.TaxId,
+                //                                 taxBranch = dealer.TaxBranch,
+                //                                 phone = user.Telefon,
+                //                                 city = user.Sehir,
+                //                                 district = user.Ilce,
+                //                                 address = user.Adres
+                //                             },
+                //                             order = new
+                //                             {
+                //                                 date = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                //                                 paymentType = 10,
+                //                                 status = 1,
+                //                                 note = ""
+                //                             },
+                //                             products = productList
+                //                         };
+
+
+
+
+
+                //                         try
+                //                         {
+                //                             Console.WriteLine($"OtoSticker siparişi gönderiliyor... Kullanıcı: {user.Email}");
+                //                             var result = await _otostickerService.CreateFastSaleAsync(fastSaleRequest, dealer, kullaniciId.Value);
+                //                             Console.WriteLine("OtoSticker yanıtı: " + result);
+
+                //                             // 🔹 OtoSticker sipariş listesini çek
+                //                             var orderListJson = await _otostickerService.GetOrderListAsync(dealer.Id);
+
+                //                             if (orderListJson != null)
+                //                             {
+                //                                 try
+                //                                 {
+                //                                     var list = orderListJson.RootElement
+                //                                         .GetProperty("result")
+                //                                         .GetProperty("list");
+
+                //                                     if (list.GetArrayLength() > 0)
+                //                                     {
+                //                                         var lastOrder = list[0];
+                //                                         var otoOrderId = lastOrder.TryGetProperty("id", out var idProp)
+                //  ? idProp.GetInt32().ToString()
+                //  : "(id bulunamadı)";
+                //                                         var otoOrderNo = lastOrder.TryGetProperty("code", out var codeProp)
+                //                                             ? codeProp.GetString()
+                //                                             : "(code bulunamadı)";
+
+                //                                         var message = $"📦 *OtoSticker Sipariş Numarası: {otoOrderNo}";
+                //                                         await _telegramService.SendOrderMessageAsync(user.Id, message);
+
+                //                                     }
+                //                                     else
+                //                                     {
+                //                                         await _telegramService.SendOrderMessageAsync(user.Id, "⚠️ OtoSticker sipariş listesi boş döndü.");
+                //                                     }
+                //                                 }
+                //                                 catch (Exception ex)
+                //                                 {
+                //                                     Console.WriteLine("Sipariş listesi parse hatası: " + ex.Message);
+                //                                     await _telegramService.SendOrderMessageAsync(user.Id, $"⚠️ Sipariş listesi okunamadı: {ex.Message}");
+                //                                 }
+                //                             }
+
+                //                         }
+                //                         catch (Exception ex)
+                //                         {
+                //                             Console.WriteLine("OtoSticker siparişi başarısız: " + ex.Message);
+                //                             await _telegramService.SendOrderMessageAsync(
+                //                                 user.Id,
+                //                                 $"⚠️ OtoSticker siparişi başarısız:\n{ex.Message}"
+                //                             );
+                //                         }
+                //                     }
+                //                 }
+                //             }
+
+
 
                 siparis.TelegramSent = true;
                 await _repo.SaveAsync();
@@ -502,9 +816,395 @@ namespace OtoEntegre.Api.Controllers
             }
             catch (Exception ex)
             {
-                siparis.TelegramSent = false;
-                await _repo.SaveAsync();
+                if (siparis != null)
+                {
+                    siparis.TelegramSent = false;
+                    await _repo.SaveAsync();
+                }
+                Console.WriteLine("SendSiparisTelegram hata: " + ex);
+
+                Console.WriteLine("SendSiparisTelegram hata: " + ex.Message);
                 return StatusCode(500, new { sent = false, error = ex.Message });
+            }
+        }
+        public class TopluPdfRequest
+        {
+            public List<Guid> OrderIds { get; set; }
+
+            // kullanıcı isterse Telegram’a göndersin
+            public bool SendToTelegram { get; set; } = false;
+        }
+
+
+        [HttpPost("toplu-pdf")]
+        public async Task<IActionResult> TopluPdfOlustur([FromBody] TopluPdfRequest request)
+        {
+            if (request.OrderIds == null || !request.OrderIds.Any())
+                return BadRequest("Sipariş seçilmedi.");
+
+            // 1. Seçilen siparişleri veritabanından çek
+            var siparisler = await _dbContext.Siparisler
+                .Include(s => s.SiparisUrunleri)
+                .ThenInclude(su => su.Urun)
+                .Where(s => request.OrderIds.Contains(s.Id))
+                .ToListAsync();
+
+            if (!siparisler.Any())
+                return NotFound("Sipariş bulunamadı.");
+
+            // Dosya yollarını tutacak liste
+            var generatedFiles = new List<string>();
+
+            string tempOutputFolder = Path.Combine(Path.GetTempPath(), "OtoEntegrePdf");
+            var tumSiparisUrunleri = siparisler.SelectMany(s => s.SiparisUrunleri).ToList();
+            try
+            {
+                Console.WriteLine($"Siparişler = > {siparisler}");
+                foreach (var siparis in siparisler)
+                {
+                    var kullaniciId = siparis.KullaniciId;
+                    // Ürün verilerini servisin istediği formata çevir
+                    var urunVerileri = await (from su in _dbContext.SiparisUrunleri
+                                              join u in _dbContext.Urunler on su.Urun_Id equals u.Id
+                                              join d in _dbContext.SiparisDosyalari
+                                                  on u.Image equals d.Dosya_Url into dosyalar
+                                              from d in dosyalar.DefaultIfEmpty()
+                                              where su.Siparis_Id == siparis.Id && (d == null || d.Dosya_Turu == "image")
+                                              select new
+                                              {
+                                                  UrunId = su.Urun_Id,
+                                                  u.Ad,
+                                                  u.ProductCode,
+                                                  Image = u.Image ?? string.Empty,
+                                                  su.Adet,
+                                                  siparis.Renk,
+                                                  siparis.Beden,
+                                                  su.MerchantSku,
+                                                  su.SiparisNotu,
+                                                  u.UrunTedarikBarcode
+                                              }).Distinct().ToListAsync();
+
+                    var pdfUrunler = urunVerileri
+                          .GroupBy(u => u.UrunId)
+                          .Select(g => g.First())
+                          .Select(u => (
+                              Ad: u.Ad,
+                              Adet: u.Adet,
+                              Renk: string.IsNullOrWhiteSpace(u.Renk) ? "-" : u.Renk,
+                              Beden: string.IsNullOrWhiteSpace(u.Beden) ? "-" : u.Beden,
+                              Barkod: u.ProductCode?.ToString() ?? "-",
+                              StokKodu: u.ProductCode?.ToString() ?? "-",
+                              MerchantSku: u.MerchantSku ?? "-",
+                              SiparisNotu: _dbContext.SiparisUrunleri
+                                  .Where(x => x.Siparis_Id == siparis.Id && x.Urun_Id == u.UrunId)
+                                  .Select(x => x.SiparisNotu)
+                                  .FirstOrDefault() ?? "-"
+                          )).ToList();
+                    // 📌 Ürünlerden sadece ilkini alıyoruz
+                    var ilkUrun = urunVerileri.FirstOrDefault();
+
+
+                    var cargoMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "Yurtiçi Kargo Marketplace", "yurtici_ornekBarkod (2).pdf" },
+        { "YKMP", "yurtici_ornekBarkod (2).pdf" },
+        { "Trendyol Express Marketplace", "tyexpress_ornekBarkod (2).pdf" },
+        { "TEXMP", "tyexpress_ornekBarkod (2).pdf" },
+        { "Sürat Kargo Marketplace", "surat_ornekBarkod (2).pdf" },
+        { "SURATMP", "surat_ornekBarkod (2).pdf" },
+        { "PTT Kargo Marketplace", "ptt_ornekBarkod (2).pdf" },
+        { "PTTMP", "ptt_ornekBarkod (2).pdf" },
+        { "Kolay Gelsin Marketplace", "kolaygelsin_ornekBarkod (2).pdf" },
+        { "KOLAYGELSINMP", "kolaygelsin_ornekBarkod (2).pdf" },
+        { "Horoz Kargo Marketplace", "horoz_ornekBarkod (2).pdf" },
+        { "HOROZMP", "horoz_ornekBarkod (2).pdf" },
+        { "DHL eCommerce Marketplace", "dhl_ornekBarkod (2).pdf" },
+        { "DHLECOMMP", "dhl_ornekBarkod (2).pdf" },
+        { "CEVA Marketplace", "ceva_ornekBarkod (2).pdf" },
+        { "CEVAMP", "ceva_ornekBarkod (2).pdf" },
+        { "Aras Kargo Marketplace", "aras_ornekBarkod (2).pdf" },
+        { "ARASMP", "aras_ornekBarkod (2).pdf" },
+        { "Borusan Lojistik Marketplace", "borusan_ornekBarkod (2).pdf" }
+    };
+
+                    string cargoFileName = cargoMap.TryGetValue(siparis.CargoProviderName, out var fileName)
+                                        ? fileName
+                                        : "ornekBarkod (2).pdf";
+                    var filenames = new[] { cargoFileName };
+                    var basePaths = new[]
+                                                   {
+                _env.ContentRootPath,
+                Directory.GetCurrentDirectory(),
+                Path.GetFullPath(Path.Combine(_env.ContentRootPath, "..")),
+                AppContext.BaseDirectory ?? _env.ContentRootPath
+            };
+                    var candidates = basePaths
+                                    .SelectMany(p => filenames.Select(f => Path.Combine(p, "labels", f)))
+                                    .ToList();
+
+                    var template = candidates.FirstOrDefault(System.IO.File.Exists) ?? string.Empty;
+                    // 2. Her sipariş için PDF oluştur (Senin servisini kullanıyoruz)
+                    string filePath = await _pdfLabelService.GenerateFromTemplateAsync(
+                    templatePath: template,
+                    outputDirectory: tempOutputFolder,
+                    siparisNo: siparis.SiparisNumarasi,
+                    adSoyad: siparis.MusteriAdSoyad,
+                    adres: siparis.MusteriAdres, // Veya uygun adres alanı
+                    kargoBarkod: "", // Varsa doldurun
+                    kargoBarkodNumarasi: "", // Varsa doldurun
+                    renk: "",
+                    beden: "",
+                    kargoTakipNumarasi: siparis.KargoTakipNumarasi, // Örnek alan
+                    urunTrendyolKod: "",
+                    urunler: pdfUrunler,
+                    new PdfLabelService.PdfLabelPositions
+                    {
+                        SiparisNoX = 98,
+                        SiparisNoY = 276,
+                        AdSoyadX = 98,
+                        AdSoyadY = 308,
+                        AdresX = 96,
+                        AdresY = 330,
+                        UrunBaslikX = 35,
+                        UrunBaslikY = 400,
+                        UrunSatirX = 35,
+                        UrunSatirStartY = 420,
+                        UrunSatirHeight = 14,
+                        MaxUrunSatir = 10,
+                        FontFamily = "Arial",
+                        FontSize = 10,
+                        FontBoldFamily = "Arial",
+                        FontBoldSize = 11
+                    }
+                );
+                    var urunNotlari = pdfUrunler
+                                        .Where(u => !string.IsNullOrWhiteSpace(u.SiparisNotu) && u.SiparisNotu != "-")
+                                        .Select(u => $"{u.Ad}: {u.SiparisNotu}")
+                                        .ToList();
+
+                    if (urunNotlari.Any())
+                    {
+                        var notMesaji = "📝 *Sipariş Notları:*\n" + string.Join("\n", urunNotlari);
+                        await _telegramService.SendOrderMessageAsync(siparis.KullaniciId, notMesaji);
+                    }
+                    var pdfBytes = await System.IO.File.ReadAllBytesAsync(filePath);
+
+
+
+                    generatedFiles.Add(filePath);
+                }
+
+                // 3. Oluşan PDF'leri birleştir
+                var mergedStream = _pdfLabelService.MergePdfs(generatedFiles);
+
+                // Eğer kullanıcı PDF'i Telegram’a da göndermek istiyorsa
+                if (request.SendToTelegram)
+                {
+                    Console.WriteLine("Toplu PDF telegrama gönderiliyor.");
+
+                    var pdfBytes = mergedStream.ToArray();
+
+                    // ❗ sadece bir kullanıcı id alıyoruz
+                    var kullaniciId = siparisler.First().KullaniciId;
+
+                    if (!kullaniciId.HasValue)
+                    {
+                        Console.WriteLine("Kullanıcı bilgisi yok, OtoSticker siparişi atlandı.");
+                    }
+                    else
+                    {
+
+                        int toplamAdet = tumSiparisUrunleri.Sum(su => su.Adet);
+                        var messageBuilder = new StringBuilder();
+                        
+
+                        // B. Bir siparişten herhangi bir ürün resmini bul (SiparisUrunleri'ni kullanabiliriz)
+                        var ilkUrunResmi = tumSiparisUrunleri
+                            .FirstOrDefault(su => su.Urun != null && !string.IsNullOrWhiteSpace(su.Urun.Image))?.Urun?.Image;
+
+                        var imageUrl = !string.IsNullOrWhiteSpace(ilkUrunResmi)
+                            ? ilkUrunResmi
+                            : "https://dummyimage.com/600x400/cccccc/000000&text=Sipariş+Resmi";
+
+                        // C. Ürün resmiyle birlikte ilk mesajı gönder (SADECE 1 KERE)
+                        var result = await _telegramService.SendOrderMessageWithResultAsync(
+                             kullaniciId.Value,
+                             messageBuilder.ToString(),
+                             imageUrl
+                        );
+
+                        // D. Hata kontrolü ve Telegram bilgisi güncelleme (Artık tek bir sipariş yerine, eğer toplu sipariş için bir modeliniz varsa onu güncelleyebilirsiniz)
+                        // Eğer her sipariş için MessageId ayrı ayrı kaydedilmeyecekse, bu kısımlar atlanabilir veya toplu sipariş modeline taşınabilir.
+                        // Bu örnekte, sadece mesajın başarılı gönderildiği varsayılıyor.
+
+                        var user = await _dbContext.Kullanicilar.FirstOrDefaultAsync(u => u.Id == kullaniciId.Value);
+                        if (user == null)
+                        {
+                            Console.WriteLine("Kullanıcı bulunamadı.");
+                        }
+                        else
+                        {
+                            // E. PDF dosyasını gönder (SADECE 1 KERE)
+await _telegramService.SendDocumentAsync("Toplu Sipariş PDF", pdfBytes, kullaniciId.Value, $"toplu_siparis_{siparisler.Count}_kisi.pdf");                            await _telegramService.SendOrderMessageAsync(kullaniciId, "----------------------------------");
+                        }
+                        //                 else
+                        //                 {
+                        //                     // 1) Bayi listesi al
+                        //                     var dealerListResponse = await _otostickerService.GetDealerListAsync();
+                        //                     var dealer = dealerListResponse?.Result?.List?
+                        //                         .FirstOrDefault(d => d.Email.Trim().Equals(user.Email.Trim(), StringComparison.OrdinalIgnoreCase));
+
+                        //                     if (dealer == null)
+                        //                     {
+                        //                         Console.WriteLine($"OtoSticker bayi bulunamadı: {user.Email}");
+                        //                     }
+                        //                     else
+                        //                     {
+                        //                         // 2) Tüm siparişlerdeki ürünleri barcode’a göre grupla
+                        //                         var groupedProducts = siparisler
+                        //                             .SelectMany(s => s.SiparisUrunleri)
+                        //                             .Where(su => su.Urun != null && !string.IsNullOrWhiteSpace(su.Urun.UrunTedarikBarcode))
+                        //                             .GroupBy(su => su.Urun.UrunTedarikBarcode)
+                        //                             .Select(g => new
+                        //                             {
+                        //                                 Barcode = g.Key,
+                        //                                 TotalQuantity = g.Sum(x => x.Adet)
+                        //                             })
+                        //                             .ToList();
+
+                        //                         var otoProductsList = new List<object>();
+
+                        //                         foreach (var item in groupedProducts)
+                        //                         {
+                        //                             var barcode = item.Barcode;
+
+                        //                             var otoProduct = await _otostickerService.GetProductByBarcodeAsync(barcode);
+                        //                             if (otoProduct == null)
+                        //                             {
+                        //                                 Console.WriteLine($"📌 OtoSticker ürün bulunamadı (barcode={barcode})");
+                        //                                 continue;
+                        //                             }
+
+                        //                             decimal otoPrice = otoProduct.SalePrice;
+
+                        //                             otoProductsList.Add(new
+                        //                             {
+                        //                                 id = otoProduct.ProductId,
+                        //                                 price = otoPrice,
+                        //                                 quantity = item.TotalQuantity,
+                        //                                 variant1 = ""  // toplu siparişte renk/beden yoksa boş geçiyoruz
+                        //                             });
+                        //                         }
+
+                        //                         if (otoProductsList.Any())
+                        //                         {
+                        //                             var fastSaleRequest = new
+                        //                             {
+                        //                                 customer = new
+                        //                                 {
+                        //                                     ID = user.Tedarik_Kullanici_Id,
+                        //                                     email = dealer.Email,
+                        //                                     name = dealer.Name,
+                        //                                     lastname = dealer.Lastname,
+                        //                                     code = dealer.Code,
+                        //                                     title = dealer.Title,
+                        //                                     group = dealer.Group,
+                        //                                     status = dealer.Status,
+                        //                                     balance = dealer.Balance,
+                        //                                     discount = dealer.Discount,
+                        //                                     nationalId = dealer.NationalId,
+                        //                                     taxId = dealer.TaxId,
+                        //                                     taxBranch = dealer.TaxBranch,
+                        //                                     phone = user.Telefon,
+                        //                                     city = user.Sehir,
+                        //                                     district = user.Ilce,
+                        //                                     address = user.Adres
+                        //                                 },
+                        //                                 order = new
+                        //                                 {
+                        //                                     date = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                        //                                     paymentType = 10,
+                        //                                     status = 1,
+                        //                                     note = ""
+                        //                                 },
+                        //                                 products = otoProductsList
+                        //                             };
+
+                        //                             var orderListJson = await _otostickerService.GetOrderListAsync(dealer.Id);
+
+                        //                             if (orderListJson != null)
+                        //                             {
+                        //                                 try
+                        //                                 {
+                        //                                     var list = orderListJson.RootElement
+                        //                                         .GetProperty("result")
+                        //                                         .GetProperty("list");
+
+                        //                                     if (list.GetArrayLength() > 0)
+                        //                                     {
+                        //                                         var lastOrder = list[0];
+                        //                                         var otoOrderId = lastOrder.TryGetProperty("id", out var idProp)
+                        //  ? idProp.GetInt32().ToString()
+                        //  : "(id bulunamadı)";
+                        //                                         var otoOrderNo = lastOrder.TryGetProperty("code", out var codeProp)
+                        //                                             ? codeProp.GetString()
+                        //                                             : "(code bulunamadı)";
+
+                        //                                         var message = $"📦 *OtoSticker Sipariş Numarası: {otoOrderNo}";
+                        //                                         await _telegramService.SendOrderMessageAsync(user.Id, message);
+
+                        //                                     }
+                        //                                     else
+                        //                                     {
+                        //                                         await _telegramService.SendOrderMessageAsync(user.Id, "⚠️ OtoSticker sipariş listesi boş döndü.");
+                        //                                     }
+                        //                                 }
+                        //                                 catch (Exception ex)
+                        //                                 {
+                        //                                     Console.WriteLine("Sipariş listesi parse hatası: " + ex.Message);
+                        //                                     await _telegramService.SendOrderMessageAsync(user.Id, $"⚠️ Sipariş listesi okunamadı: {ex.Message}");
+                        //                                 }
+                        //                             }
+                        //                             var otoResult = await _otostickerService.CreateFastSaleAsync(fastSaleRequest, dealer, kullaniciId.Value);
+
+                        //                             Console.WriteLine("📦 OtoSticker toplu sipariş oluşturuldu.");
+                        //                         }
+                        //                         else
+                        //                         {
+                        //                             Console.WriteLine("OtoSticker’a gönderilecek ürün bulunamadı.");
+                        //                         }
+
+                        //                     }
+                        //                 }
+                    }
+
+                    // TelegramSent işaretle
+                    foreach (var siparis in siparisler)
+                    {
+                        siparis.TelegramSent = true;
+                        _dbContext.Siparisler.Update(siparis);
+
+                    }
+
+                    await _dbContext.SaveChangesAsync();
+                }
+
+
+                // 4. Dosyayı döndür
+                return File(mergedStream.ToArray(), "application/pdf", $"Toplu_Siparis_{DateTime.Now:yyyyMMddHHmm}.pdf");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest($"Hata oluştu: {ex.Message}");
+            }
+            finally
+            {
+                // 5. Temizlik: Geçici dosyaları sil
+                foreach (var file in generatedFiles)
+                {
+                    if (System.IO.File.Exists(file))
+                        System.IO.File.Delete(file);
+                }
             }
         }
 

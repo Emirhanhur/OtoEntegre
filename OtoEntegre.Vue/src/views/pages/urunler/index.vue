@@ -6,15 +6,27 @@ import api from "../../axios";
 import AddProductModal from './addProductModal.vue';
 import AddVariantProductModal from './addVariantProductModal.vue';
 import BulkUploadModal from './BulkUploadModal.vue';
+import ProductDetailModal from './ProductDetailModal.vue';
 
 export default {
     components: {
         AddProductModal,
         AddVariantProductModal,
-        BulkUploadModal
+        BulkUploadModal,
+        ProductDetailModal
     },
     data() {
         return {
+            productPrices: {},
+            salePriceInput: 0,
+            listPriceInput: 0,
+            quantityInput: 0,
+            approvedFilter: null,
+            archivedFilter: null,
+            onSaleFilter: null,
+            rejectedFilter: null,
+            blacklistedFilter: null,
+            barcodeFilter: "",
             products: [], // Trendyol ürünleri
             selectedCategory: null, // artık ID tutacak
             productsTotal: 0,
@@ -27,7 +39,8 @@ export default {
             isLoading: false,
             selectedOrders: [],
             selectedOrder: null,
-            searchQuery: "", // 🔍 Arama inputu için
+            selectedImage: "", // Kullanıcının seçtiği büyük resim
+
             selectedShippingCompany: "",
             successMessage: "", // ✅ alert için eklendi
 
@@ -116,16 +129,7 @@ export default {
         totalPages() {
             return Math.ceil(this.orders.length / this.pageSize) || 1;
         },
-        filteredProducts() {
-            // Apply search and category filtering
-            const q = this.searchQuery.trim().toLowerCase();
 
-            return this.products.filter(p => {
-                const matchesSearch = !q || ((p.productCode && p.productCode.toString().toLowerCase().includes(q)) || (p.title && p.title.toLowerCase().includes(q)));
-                const matchesCategory = !this.selectedCategory || (p.category && p.category === this.selectedCategory);
-                return matchesSearch && matchesCategory;
-            });
-        },
         paginatedOrders() {
             const start = (this.currentPage - 1) * this.pageSize;
             return this.orders.slice(start, start + this.pageSize);
@@ -135,9 +139,7 @@ export default {
         selectedStatus() {
             this.currentPage = 1;
         },
-        searchQuery() {
-            this.currentPage = 1; // Arama yapıldığında ilk sayfaya dön
-        }
+
     },
     async mounted() {
         this.loadTrendyolProducts();
@@ -146,23 +148,112 @@ export default {
         clearInterval(this.pollingInterval);
     },
     methods: {
+        initInputs() {
+            this.salePriceInput = this.product?.salePrice ?? this.price ?? 0;
+            this.listPriceInput = this.product?.listPrice ?? this.price ?? 0;
+            this.quantityInput = this.product?.stock ?? 0;
+        },
 
+        async filterByBarcode() {
+            this.productsPage = 0; // sayfa sıfırla
+            await this.loadTrendyolProducts(0, this.barcodeFilter);
+        },
 
         async loadTrendyolProducts(page = 0) {
             this.isLoading = true;
             const kullaniciId = localStorage.getItem("kullanici_id");
-            const query = this.searchQuery ? `&search=${encodeURIComponent(this.searchQuery)}` : "";
+            const query = new URLSearchParams();
+            query.append("page", this.productsPage);
+            query.append("size", this.productsSize);
 
-            const res = await api.get(`/api/urunler/trendyol/${kullaniciId}?page=${page}&size=${this.productsSize}${query}`);
+            if (this.barcodeFilter) query.append("barcode", this.barcodeFilter);
+            if (this.approvedFilter !== null) query.append("approved", this.approvedFilter);
+            if (this.archivedFilter !== null) query.append("archived", this.archivedFilter);
+            if (this.onSaleFilter !== null) query.append("onSale", this.onSaleFilter);
+            if (this.rejectedFilter !== null) query.append("rejected", this.rejectedFilter);
+            if (this.blacklistedFilter !== null) query.append("blacklisted", this.blacklistedFilter);
+
+            const res = await api.get(`/api/urunler/trendyol/${kullaniciId}?${query.toString()}`);
+
+
 
             this.products = res.data.data ?? [];
-            // populate unique categories from returned products
+            this.products.forEach(product => {
+                this.productPrices[product.barcode] = {
+                    salePrice: product.salePrice || 0,
+                    listPrice: product.listPrice || 0,
+                    quantity: product.stock || 0
+                };
+            });
+
             this.categories = Array.from(new Set(this.products.map(p => p.category).filter(c => c && c.length > 0)));
             this.productsTotal = res.data.total;
             this.productsPage = res.data.page;
             this.isLoading = false;
-        },
+        }
+        ,
+        async updateProduct(p) {
+            const kullaniciId = localStorage.getItem("kullanici_id");
+            if (!kullaniciId) return alert("Kullanıcı bulunamadı");
 
+            const prices = this.productPrices[p.barcode];
+
+            const req = {
+                KullaniciId: kullaniciId,
+                Price: Number(prices.salePrice),
+                ListPrice: Number(prices.listPrice),
+                Quantity: Number(prices.quantity)
+            };
+
+            try {
+                await api.post(`/api/urunler/${p.barcode}/update-price`, req);
+                p.salePrice = prices.salePrice;
+                p.listPrice = prices.listPrice;
+                p.stock = prices.quantity;
+
+                this.successMessage = "Güncellendi";
+                setTimeout(() => this.successMessage = "", 2000);
+
+            } catch (err) {
+                console.error(err);
+                alert("Güncelleme hatası");
+            }
+        }
+        ,
+        async saveChanges() {
+            const kullaniciId = localStorage.getItem('kullanici_id');
+            if (!kullaniciId) return alert('Kullanıcı bilgisi bulunamadı.');
+            const barcode = this.product?.barcode;
+            if (!barcode) return alert('Ürün barkodu bulunamadı.');
+
+            this.isSaving = true;
+
+            try {
+                // 1️⃣ Fiyat & stok güncellemesi
+                const priceReq = {
+                    KullaniciId: kullaniciId,
+                    Price: Number(this.salePriceInput),
+                    ListPrice: Number(this.listPriceInput),
+                    Quantity: Number(this.quantityInput)
+                };
+                const priceRes = await api.post(`/api/urunler/${barcode}/update-price`, priceReq);
+                if (!priceRes?.data?.success) {
+                    throw new Error(priceRes?.data?.message || 'Fiyat güncellemesi başarısız.');
+                }
+
+                // 2️⃣ Ürün bilgisi güncellemesi
+                await this.updateProductInfo();
+
+                this.successMessage = 'Ürün ve fiyat bilgileri başarıyla güncellendi.';
+                this.$emit('updated', { barcode, salePrice: this.salePriceInput, listPrice: this.listPriceInput });
+                setTimeout(() => { this.successMessage = ''; }, 3000);
+            } catch (err) {
+                console.error(err);
+                alert(err.message || 'Güncelleme sırasında hata oluştu.');
+            } finally {
+                this.isSaving = false;
+            }
+        },
         nextProductsPage() {
             if ((this.productsPage + 1) * this.productsSize >= this.productsTotal) return;
             this.productsPage++;
@@ -177,34 +268,22 @@ export default {
         formatMoney(amount, currency) {
             return formatCurrency(amount, currency);
         },
+        openProductModal(product) {
+            this.modalProduct = product;       // seçilen ürünü atıyoruz
+            this.modalPrice = product.salePrice || 0;
+            this.modalStats = { totalSold: 0, orderCount: 0 }; // gerekiyorsa doldurun
+            console.log(product)
 
-        // Product modal related methods
-        async openProductModal(p) {
-            console.log('Opening product modal for', p);
-            this.modalProduct = p;
-            this.modalPrice = p.salePrice || 0;
-            this.modalStats = null;
-            try {
-                const kullaniciId = localStorage.getItem('kullanici_id') || '';
-                const q = kullaniciId ? `?kullaniciId=${kullaniciId}` : '';
-                const res = await api.get(`api/urunler/stats/${p.productCode}${q}`);
-                this.modalStats = res.data;
-            } catch (err) {
-                console.error('stats fetch error', err);
-                this.modalStats = { totalSold: 0, orderCount: 0 };
-            }
-
-            await nextTick();
-            const modalEl = document.getElementById('productDetailModal');
-            if (modalEl) {
-                const bsModal = new Modal(modalEl);
-                bsModal.show();
-                this._bsModalInstance = bsModal;
-            }
+            // Modal açma
+            this.$nextTick(() => {
+                const el = document.getElementById("productDetailModal");
+                if (el) new Modal(el).show();
+            });
         },
-
-
-
+        changeProductPageSize() {
+            this.productsPage = 0; // ilk sayfaya dön
+            this.loadTrendyolProducts();
+        }
 
     }
 };
@@ -215,7 +294,7 @@ export default {
         <!-- Header -->
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h3 class="fw-semibold mb-0">
-                <i class="bi bi-bag-check-fill text-primary me-2"></i> Trendyol Ürünlerim
+                <span class="material-icons text-primary me-2 align-middle">inventory_2</span> Trendyol Ürünlerim
             </h3>
 
             <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -223,70 +302,141 @@ export default {
                 <button class="btn btn-primary" @click="$refs.addVariantProductModal.openVariantModal()">
                     Yeni Varyant Ürün
                 </button>
-                <button class="btn btn-success" @click="$refs.bulkUploadModal.openModal()">
-                    <i class="bi bi-file-earmark-excel me-1"></i> Excel ile Toplu Yükle
-                </button>
+                <!-- <button class="btn btn-success" @click="$refs.bulkUploadModal.openModal()">
+                    <span class="material-icons me-1 align-middle">file_download</span> Excel ile Toplu Yükle
+                </button> -->
+            </div>
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                <input type="text" class="form-control me-2" placeholder="Barkod ile ara..." v-model="barcodeFilter"
+                    @input="filterByBarcode" style="max-width: 180px;" />
 
-
-                <select v-model="selectedCategory" class="form-select form-select-sm category-filter">
-                    <option value="">Tüm Kategoriler</option>
-                    <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+                <select class="form-select me-2" v-model="approvedFilter" @change="loadTrendyolProducts()"
+                    style="max-width: 180px;">
+                    <option :value="null">Onay Durumu (Tümü)</option>
+                    <option :value="true">Onaylı</option>
+                    <option :value="false">Onaysız</option>
                 </select>
 
-                <div class="search-box">
-                    <i class="bi bi-search"></i>
-                    <input v-model="searchQuery" type="text" class="form-control shadow-sm"
-                        placeholder="Ürün adı veya SKU ara..." />
-                </div>
+                <select class="form-select me-2" v-model="archivedFilter" @change="loadTrendyolProducts()"
+                    style="max-width: 180px;">
+                    <option :value="null">Arşiv Durumu (Tümü)</option>
+                    <option :value="true">Arşivlenmiş</option>
+                    <option :value="false">Arşivlenmemiş</option>
+                </select>
+
+                <select class="form-select me-2" v-model="onSaleFilter" @change="loadTrendyolProducts()"
+                    style="max-width: 180px;">
+                    <option :value="null">Satış Durumu (Tümü)</option>
+                    <option :value="true">Satışta</option>
+                    <option :value="false">Satışta Değil</option>
+                </select>
+
+                <select class="form-select me-2" v-model="rejectedFilter" @change="loadTrendyolProducts()"
+                    style="max-width: 180px;">
+                    <option :value="null">Reddedilen (Tümü)</option>
+                    <option :value="true">Reddedilen</option>
+                    <option :value="false">Reddedilmeyen</option>
+                </select>
+
+                <select class="form-select me-2" v-model="blacklistedFilter" @change="loadTrendyolProducts()"
+                    style="max-width: 180px;">
+                    <option :value="null">Black List (Tümü)</option>
+                    <option :value="true">Black List</option>
+                    <option :value="false">Black List Değil</option>
+                </select>
             </div>
+
+
+        </div>
+        <div class="d-flex justify-content-end mb-2 align-items-center gap-2">
+            Listelenecek Ürün Sayısı:
+            <select class="form-select form-select-sm" style="width:120px" v-model.number="productsSize"
+                @change="changeProductPageSize">
+                <option :value="10">10</option>
+                <option :value="20">20</option>
+                <option :value="50">50</option>
+                <option :value="100">100</option>
+            </select>
         </div>
 
         <!-- Ürün Listesi -->
         <div class="card shadow-sm border-0 rounded-4">
-            <div class="card-body">
-                <div v-if="isLoading" class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2 text-muted small">Ürünler yükleniyor...</p>
-                </div>
+            <div class="card-body p-0">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Görsel</th>
+                            <th>Ürün</th>
+                            <th>Satış Fiyatı</th>
+                            <th>Liste Fiyatı</th>
+                            <th>Stok</th>
+                            <th>Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="p in products" :key="p.productCode">
+                            <td>
+                                <img :src="p.images?.[0]?.url || p.productUrl" style="height:50px;">
+                            </td>
 
-                <div v-else>
-                    <div class="row g-4">
-                        <div class="col-6 col-md-3 col-lg-2" v-for="p in filteredProducts" :key="p.productCode">
-                            <div class="product-card" @click="openProductModal(p)">
-                                <div class="img-wrapper">
-                                    <img :src="(p.images?.length ? p.images[0].url : p.productUrl)" alt="product" />
-                                </div>
-                                <div class="p-2">
-                                    <h6 class="title">{{ p.title }}</h6>
-                                    <p class="price">{{ formatMoney(p.salePrice, 'TRY') }}</p>
-                                    <p class="small text-muted mb-0">SKU: {{ p.productCode }}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                            <td>
+                                <strong>{{ p.title }}</strong><br>
+                                Kod: {{ p.productCode }}<br>
+                                Barkod: {{ p.barcode }}
+                            </td>
 
-                    <!-- Sayfalandırma -->
-                    <div class="d-flex justify-content-center align-items-center gap-3 mt-4">
-                        <button class="btn btn-outline-secondary btn-sm" :disabled="productsPage === 0"
-                            @click="prevProductsPage">
-                            <i class="bi bi-chevron-left"></i> Önceki
-                        </button>
-                        <span class="fw-medium small">
-                            Sayfa {{ productsPage + 1 }} / {{ Math.ceil(productsTotal / productsSize) || 1 }}
-                        </span>
-                        <button class="btn btn-outline-secondary btn-sm"
-                            :disabled="(productsPage + 1) * productsSize >= productsTotal" @click="nextProductsPage">
-                            Sonraki <i class="bi bi-chevron-right"></i>
-                        </button>
-                    </div>
+                            <td>
+                                <input type="number" step="0.01" class="form-control form-control-sm"
+                                    v-model.number="productPrices[p.barcode].salePrice" @click.stop
+                                    @keyup.enter="updateProduct(p)" />
+                            </td>
+
+                            <td>
+                                <input type="number" step="0.01" class="form-control form-control-sm"
+                                    v-model.number="productPrices[p.barcode].listPrice" @click.stop
+                                    @keyup.enter="updateProduct(p)" />
+                            </td>
+
+                            <td>
+                                <input type="number" class="form-control form-control-sm"
+                                    v-model.number="productPrices[p.barcode].quantity" @click.stop
+                                    @keyup.enter="updateProduct(p)" />
+                            </td>
+
+                            <td>
+                                <button class="btn btn-outline-primary btn-sm" @click.stop="openProductModal(p)">
+                                    Detay
+                                </button>
+                            </td>
+                        </tr>
+
+                    </tbody>
+                </table>
+
+                <!-- Sayfalandırma -->
+                <div class="d-flex justify-content-center align-items-center gap-3 mt-2 p-2">
+                    <button class="btn btn-outline-secondary btn-sm" :disabled="productsPage === 0"
+                        @click="prevProductsPage">
+                        <span class="material-icons align-middle me-1">chevron_left</span> Önceki
+                    </button>
+                    <span class="fw-medium small">
+                        Sayfa {{ productsPage + 1 }} / {{ Math.ceil(productsTotal / productsSize) || 1 }}
+                    </span>
+                    <button class="btn btn-outline-secondary btn-sm"
+                        :disabled="(productsPage + 1) * productsSize >= productsTotal" @click="nextProductsPage">
+                        Sonraki <span class="material-icons align-middle ms-1">chevron_right</span>
+                    </button>
                 </div>
             </div>
         </div>
-
         <!-- Modals -->
         <AddProductModal ref="addProductModal" />
         <AddVariantProductModal ref="addVariantProductModal" />
         <BulkUploadModal ref="bulkUploadModal" @upload-complete="loadTrendyolProducts" />
+        <!-- Product Detail Modal -->
+        <ProductDetailModal ref="detailProductModal" :product="modalProduct" :price="modalPrice" :stats="modalStats" />
+
+
 
     </div>
 </template>

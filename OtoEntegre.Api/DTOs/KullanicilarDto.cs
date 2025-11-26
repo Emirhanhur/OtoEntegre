@@ -2,6 +2,9 @@ public class KullaniciDto
 {
     public Guid Id { get; set; }
     public string Ad { get; set; } = null!;
+    public string? Adres { get; set; } 
+    public string? Sehir { get; set; } 
+    public string? Ilce { get; set; } 
     public string Email { get; set; } = null!;
     public string Telefon { get; set; } = null!;
     public string? Entegrasyon_Telefon { get; set; }
@@ -18,6 +21,7 @@ public class KullaniciDto
 public class CreateKullaniciDto
 {
     public string Ad { get; set; } = null!;
+    public string? Adres { get; set; } 
     public string Email { get; set; } = null!;
     public string Telefon { get; set; } = null!;
     public string? Entegrasyon_Telefon { get; set; }
@@ -34,6 +38,9 @@ public class CreateKullaniciDto
 public class UpdateKullaniciDto
 {
     public string Ad { get; set; } = null!;
+    public string? Adres { get; set; }
+    public string? Sehir { get; set; }
+    public string? Ilce { get; set; }
     public string Email { get; set; } = null!;
     public string Telefon { get; set; } = null!;
     public string? Entegrasyon_Telefon { get; set; }

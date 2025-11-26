@@ -13,6 +13,15 @@ namespace OtoEntegre.Api.Entities
         [Column("ad")]
         public string Ad { get; set; } = null!;
 
+        [Column("adres")]
+        public string? Adres { get; set; } 
+
+         [Column("sehir")]
+        public string? Sehir { get; set; } 
+
+        [Column("ilce")]
+        public string? Ilce { get; set; } 
+
         [Column("email")]
         public string Email { get; set; } = null!;
 
@@ -44,6 +53,9 @@ namespace OtoEntegre.Api.Entities
         
         [Column("telegram_token")]
         public string? Telegram_Token { get; set; }
+
+        [Column("tedarik_musteri_no")]
+        public int? Tedarik_Musteri_No { get; set; }
 
         // Navigation
         public ICollection<KullaniciRolleri> Roller { get; set; } = new List<KullaniciRolleri>();

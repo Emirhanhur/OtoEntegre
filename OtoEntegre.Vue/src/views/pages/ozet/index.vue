@@ -398,8 +398,8 @@ export default {
         <div class="tabs mb-4">
             <button :class="{ 'active-tab': showSiparisTab === 'grafik' }"
                 @click="showSiparisTab = 'grafik'">Grafikler</button>
-            <button :class="{ 'active-tab': showSiparisTab === 'siparis' }" @click="showSiparisTab = 'siparis'">Sipariş
-                Bazlı</button>
+          <!--  <button :class="{ 'active-tab': showSiparisTab === 'siparis' }" @click="showSiparisTab = 'siparis'">Sipariş
+                Bazlı</button> -->
         </div>
         <div v-if="isLoading" class="text-center py-4">Veriler yükleniyor...</div>
         <div v-else>
@@ -425,9 +425,9 @@ export default {
                     </div>
                 </div>
             </div>
-
+<!--
             <div v-if="showSiparisTab === 'siparis'">
-                <!-- Özet Kartları -->
+                 Özet Kartları
                 <div class="row mb-4" v-if="siparisBazliData.length > 0">
                     <div class="col-md-3">
                         <div class="card bg-primary text-white">
@@ -466,7 +466,6 @@ export default {
                     </div>
                 </div>
 
-                <!-- Filtreler -->
                 <div class="row mb-3">
                     <div class="col-md-3">
                         <select v-model="filterStatus" class="form-select">
@@ -488,7 +487,6 @@ export default {
                     </div>
                 </div>
 
-                <!-- GROUPED TABLE -->
                 <div class="table-responsive" v-if="filteredGroupedOrders.length > 0">
                     <table class="table table-bordered table-hover">
                         <thead class="table-dark">
@@ -506,10 +504,9 @@ export default {
                         </thead>
                         <tbody>
                             <template v-for="group in filteredGroupedOrders" :key="group.siparisNo">
-                                <!-- Summary row -->
                                 <tr :class="getRowClass(group.totalKar)">
                                     <td>
-                                        <i class="fas" :class="isOpen(group.siparisNo) ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+                                        <span class="material-icons">{{ isOpen(group.siparisNo) ? 'expand_more' : 'chevron_right' }}</span>
                                     </td>
                                     <td><strong>{{ group.siparisNo }}</strong></td>
                                     <td>{{ formatDate(group.siparisTarihi) }}</td>
@@ -525,7 +522,6 @@ export default {
                                     </td>
                                 </tr>
 
-                                <!-- Expanded row: product details -->
                                 <tr v-if="isOpen(group.siparisNo)">
                                     <td colspan="9" class="p-0">
                                         <div class="p-3 bg-light">
@@ -549,7 +545,7 @@ export default {
                                                         <td style="width:90px;">
                                                             <img v-if="item.urunresmi" :src="item.urunresmi" alt="Ürün" style="width:70px; height:70px; object-fit:cover;" class="img-thumbnail" />
                                                             <div v-else style="width:70px; height:70px;" class="bg-light d-flex align-items-center justify-content-center">
-                                                                <i class="fas fa-image text-muted"></i>
+                                                                <span class="material-icons text-muted">image</span>
                                                             </div>
                                                         </td>
                                                         <td><strong>{{ item.urunAdi }}</strong></td>
@@ -574,12 +570,12 @@ export default {
 
                 <div v-else class="text-center py-4">
                     <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i>
+                        <span class="material-icons">info</span>
                         Filtre kriterlerinize uygun sipariş bulunamadı.
                     </div>
                 </div>
             </div>
-
+ -->
             <div v-if="isLoadingSiparis" class="text-center py-4">
                 <div class="spinner-border text-primary" role="status">
                     <span class="visually-hidden">Yükleniyor...</span>

@@ -97,7 +97,7 @@ export default {
   <CHeader position="sticky" :class="headerClassNames">
     <CContainer class="border-bottom px-4" fluid>
       <CHeaderToggler @click="sidebar.toggleVisible()" style="margin-inline-start: -14px">
-        <CIcon icon="cil-menu" size="lg" />
+        <span class="material-icons">menu</span>
       </CHeaderToggler>
       <CHeaderNav class="d-none d-md-flex">
         <CNavItem>
@@ -106,8 +106,8 @@ export default {
       </CHeaderNav>
       <CHeaderNav class="ms-auto">
         <CNavItem style="position: relative;">
-          <CNavLink href="#" @click="toggleNotifications">
-            <CIcon icon="cil-bell" size="lg" />
+            <CNavLink href="#" @click="toggleNotifications">
+            <span class="material-icons">notifications</span>
             <span v-if="notifications.length"
               class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
               {{ notifications.length }}
@@ -140,12 +140,12 @@ export default {
         </CNavItem>
         <CNavItem>
           <CNavLink href="#">
-            <CIcon icon="cil-list" size="lg" />
+            <span class="material-icons">format_list_bulleted</span>
           </CNavLink>
         </CNavItem>
         <CNavItem>
           <CNavLink href="#">
-            <CIcon icon="cil-envelope-open" size="lg" />
+            <span class="material-icons">mail</span>
           </CNavLink>
         </CNavItem>
       </CHeaderNav>
@@ -155,22 +155,22 @@ export default {
         </li>
         <CDropdown variant="nav-item" placement="bottom-end">
           <CDropdownToggle :caret="false">
-            <CIcon v-if="colorMode === 'dark'" icon="cil-moon" size="lg" />
-            <CIcon v-else-if="colorMode === 'light'" icon="cil-sun" size="lg" />
-            <CIcon v-else icon="cil-contrast" size="lg" />
+            <span v-if="colorMode === 'dark'" class="material-icons">dark_mode</span>
+            <span v-else-if="colorMode === 'light'" class="material-icons">light_mode</span>
+            <span v-else class="material-icons">contrast</span>
           </CDropdownToggle>
           <CDropdownMenu>
-            <CDropdownItem :active="colorMode === 'light'" class="d-flex align-items-center" component="button"
+              <CDropdownItem :active="colorMode === 'light'" class="d-flex align-items-center" component="button"
               type="button" @click="setColorMode('light')">
-              <CIcon class="me-2" icon="cil-sun" size="lg" /> Gündüz
+              <span class="material-icons me-2">light_mode</span> Gündüz
             </CDropdownItem>
             <CDropdownItem :active="colorMode === 'dark'" class="d-flex align-items-center" component="button"
               type="button" @click="setColorMode('dark')">
-              <CIcon class="me-2" icon="cil-moon" size="lg" /> Gece
+              <span class="material-icons me-2">dark_mode</span> Gece
             </CDropdownItem>
             <CDropdownItem :active="colorMode === 'auto'" class="d-flex align-items-center" component="button"
               type="button" @click="setColorMode('auto')">
-              <CIcon class="me-2" icon="cil-contrast" size="lg" /> Otomatik
+              <span class="material-icons me-2">contrast</span> Otomatik
             </CDropdownItem>
           </CDropdownMenu>
         </CDropdown>

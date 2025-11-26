@@ -42,6 +42,7 @@ namespace OtoEntegre.Api.Services
             await _repository.SaveAsync();
             return entity;
         }
+        
 
         // UPDATE
         public async Task<Entegrasyonlar> UpdateAsync(Guid id, EntegrasyonCreateDto dto)

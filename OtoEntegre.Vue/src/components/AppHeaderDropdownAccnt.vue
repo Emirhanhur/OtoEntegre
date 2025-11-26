@@ -1,7 +1,7 @@
 <template>
   <CDropdown variant="nav-item" placement="bottom-end">
     <CDropdownToggle :caret="false">
-      <i class="bi bi-person-circle"></i> 
+      <span class="material-icons">account_circle</span>
     </CDropdownToggle>
     <CDropdownMenu>
       <CDropdownHeader>Hesap</CDropdownHeader>
@@ -10,14 +10,14 @@
         
       </div>
       <CDropdownItem component="button" @click="goToProfile">
-        <i class="cil-user me-2"></i> Profil
+        <span class="material-icons me-2 align-middle">person</span> Profil
       </CDropdownItem>
       <CDropdownItem component="button">
-        <i class="cil-settings me-2"></i> Ayarlar
+        <span class="material-icons me-2 align-middle">settings</span> Ayarlar
       </CDropdownItem>
       <CDropdownDivider />
       <CDropdownItem component="button" @click="logout">
-        <i class="cil-lock-locked me-2"></i> Çıkış
+        <span class="material-icons me-2 align-middle">lock</span> Çıkış
       </CDropdownItem>
     </CDropdownMenu>
   </CDropdown>

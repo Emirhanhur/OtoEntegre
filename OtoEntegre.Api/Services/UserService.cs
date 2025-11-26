@@ -133,6 +133,7 @@ namespace OtoEntegre.Api.Services
             {
                 Id = Guid.NewGuid(),
                 Ad = dto.Ad,
+                Adres = dto.Adres,
                 Email = dto.Email,
                 Telefon = useSame ? entegrasyonPhone : dto.Telefon,
                 Entegrasyon_Telefon = entegrasyonPhone,
@@ -170,6 +171,9 @@ namespace OtoEntegre.Api.Services
             var entegrasyonPhone = useSame ? dto.Telefon : (dto.Entegrasyon_Telefon ?? user.Entegrasyon_Telefon ?? user.Telefon);
 
             user.Ad = dto.Ad;
+            user.Adres = dto.Adres;
+            user.Sehir = dto.Sehir;
+            user.Ilce = dto.Ilce;
             user.Email = dto.Email;
             user.Telefon = useSame ? entegrasyonPhone : dto.Telefon;
             user.Entegrasyon_Telefon = entegrasyonPhone;
@@ -244,6 +248,9 @@ user.Telegram_Token = dto.Telegram_Token ?? user.Telegram_Token;
             {
                 Id = user.Id,
                 Ad = user.Ad,
+                Adres = user.Adres,
+                Sehir = user.Sehir,
+                Ilce = user.Ilce,
                 Email = user.Email,
                 Telegram_Chat = user.Telegram_Chat,
                 Telegram_Token = user.Telegram_Token,
@@ -266,6 +273,28 @@ user.Telegram_Token = dto.Telegram_Token ?? user.Telegram_Token;
                 }).ToList()
             };
         }
+    
+    
+        public async Task<bool> ResetPasswordAsync(string email, string newPassword)
+{
+    // Kullanıcıyı email ile bul
+  var user = (await _userRepository.GetAllAsync())
+    .FirstOrDefault(u => u.Email?.Trim().Equals(email.Trim(), StringComparison.OrdinalIgnoreCase) == true);
+
+
+    if (user == null)
+        return false;
+
+    // Yeni şifreyi hashleyip kaydet
+    user.Sifre_Hash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+    user.Updated_At = DateTime.UtcNow;
+
+    _userRepository.Update(user);
+    await _userRepository.SaveAsync();
+
+    return true;
+}
+
     }
 }
 

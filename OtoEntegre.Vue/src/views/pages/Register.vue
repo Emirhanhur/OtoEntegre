@@ -65,7 +65,7 @@ export default {
               <!-- Kullanıcı Adı -->
               <div class="input-group mb-3">
                 <span class="input-group-text">
-                  <i class="bi bi-person"></i>
+                  <span class="material-icons">person</span>
                 </span>
                 <input type="text" class="form-control" placeholder="Kullanıcı Adı" autocomplete="username" v-model="ad"
                   required />
@@ -81,7 +81,7 @@ export default {
               <!-- Telefon -->
               <div class="input-group mb-3">
                 <span class="input-group-text">
-                  <i class="bi bi-telephone"></i>
+                  <span class="material-icons">phone</span>
                 </span>
                 <input type="tel" class="form-control" placeholder="Telefon" v-model="telefon" required />
               </div>
@@ -107,7 +107,7 @@ export default {
               <!-- Entegrasyon Telefonu -->
               <div class="input-group mb-3" v-if="telegramUseSame === false">
                 <span class="input-group-text">
-                  <i class="bi bi-telephone"></i>
+                  <span class="material-icons">phone</span>
                 </span>
                 <input type="tel" class="form-control" placeholder="Telefon Numarası (E.164, +90...)"
                   v-model="entegrasyonTelefon" />
@@ -116,7 +116,7 @@ export default {
               <!-- Şifre -->
               <div class="input-group mb-3">
                 <span class="input-group-text">
-                  <i class="bi bi-lock"></i>
+                  <span class="material-icons">lock</span>
                 </span>
                 <input type="password" class="form-control" placeholder="Şifre" autocomplete="new-password"
                   v-model="sifre" required />
@@ -125,7 +125,7 @@ export default {
               <!-- Şifre Tekrar -->
               <div class="input-group mb-4">
                 <span class="input-group-text">
-                  <i class="bi bi-lock"></i>
+                  <span class="material-icons">lock</span>
                 </span>
                 <input type="password" class="form-control" placeholder="Şifre (Tekrar)" autocomplete="new-password"
                   v-model="sifreTekrar" required />

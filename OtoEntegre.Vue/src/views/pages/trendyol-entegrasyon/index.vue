@@ -12,11 +12,24 @@ export default {
     },
     data() {
         return {
+            isBulkSendingTelegram: false,
             orders: [],
+            isPdfLoading: false, // PDF yükleniyor durumu için
             selectedStatus: null,
+            startDate: '',
+            endDate: '',
+            transactionType: 'Sale',
+            cariData: [],
+            isCariLoading: false,
             currentPage: 1,
             pageSize: 10,
             isLoading: false,
+            isGlobalLoading: false,
+            gonderilmeyenler: false,
+            sendingTelegramId: null, // 🔄 Telegram gönderimi yapılan siparişin id'si
+            isSendingTelegram: false, // yeni state
+            sendingOrderId: null, // hangi sipariş gönderiliyor
+
             selectedOrders: [],
             selectedOrder: null,
             searchQuery: "", // 🔍 Arama inputu için
@@ -39,8 +52,8 @@ export default {
             orderStatuses: [
                 { key: null, label: 'Tümü', count: 0 },
                 { key: 'CREATED', label: 'Oluşturuldu', count: 0 },
-                { key: 'SHIPPED', label: 'Taşıma Durumunda', count: 0 },
                 { key: 'PICKING', label: 'İşleme Alındı', count: 0 },
+                { key: 'SHIPPED', label: 'Taşıma Durumunda', count: 0 },
                 { key: 'DELIVERED', label: 'Teslim Edildi', count: 0 },
                 { key: 'INVOICED', label: 'Faturalandı', count: 0 },
                 { key: 'CANCELLED', label: 'İptal Edildi', count: 0 },
@@ -75,6 +88,10 @@ export default {
                     (order.urunAdi && order.urunAdi.toLowerCase().includes(q)) // API’den ürün adı geliyorsa
                 );
             }
+            if (this.gonderilmeyenler) {
+                list = list.filter(order => !order.telegramSent && order.durum !== 'İptal Edildi');
+            }
+
 
             return list;
         },
@@ -89,15 +106,54 @@ export default {
         },
         searchQuery() {
             this.currentPage = 1; // Arama yapıldığında ilk sayfaya dön
+        },
+        pageSize() {
+            this.currentPage = 1;
         }
+
     },
     async mounted() {
         this.loadOrders();
+        const orderNumber = this.$route.query.orderNumber;
+        if (orderNumber) {
+            this.openOrderModalByNumber(orderNumber);
+        }
     },
     beforeUnmount() {
         clearInterval(this.pollingInterval);
     },
     methods: {
+        handleModalClose() {
+            this.selectedOrder = null;
+
+            // 🔙 URL'den orderNumber parametresini kaldır
+            this.$router.push({
+                path: this.$route.path, // yani /trendyol-entegrasyon
+                query: {}               // boş query -> ?orderNumber kaldırılır
+            });
+        },
+        async openOrderModalByNumber(orderNumber) {
+            try {
+                const res = await api.get(`/api/Siparisler/by-order-number/${orderNumber}`);
+                this.selectedOrder = res.data;
+
+                await nextTick(); // props güncellensin
+
+                // order artık null değil → modal aç
+                if (this.$refs.orderModal?.showModal) {
+                    this.$refs.orderModal.showModal();
+                }
+
+            } catch (err) {
+                console.error("Sipariş detayı alınamadı:", err);
+                alert("Sipariş detayı alınamadı.");
+            }
+        },
+
+
+        formatDate(timestamp) {
+            return new Date(timestamp).toLocaleString("tr-TR");
+        },
         async setPicking(order) {
             console.log("İşleme alınıyor:", order);
             if (!order.sellerId || !order.paketNumarasi) {
@@ -115,6 +171,8 @@ export default {
             };
 
             try {
+                this.isGlobalLoading = true;
+
                 const res = await api.put(`/api/Siparisler/trendyol/picking/${order.id}`, payload);
                 if (res.data.success) {
                     alert("Sipariş Trendyol’da İşleme Alındı!");
@@ -125,27 +183,25 @@ export default {
             } catch (err) {
                 console.error(err);
                 alert("Hata oluştu.");
+            } finally {
+                this.isGlobalLoading = false;
             }
-        }
-        ,
+        },
         async loadOrders(durum = null) {
             try {
                 this.isLoading = true;
                 let url = `/api/Siparisler/kullanici/${localStorage.getItem("kullanici_id")}?sort=desc`;
                 if (durum !== null) url += `?durum=${durum}`;
                 const res = await api.get(url);
+                console.log("siparişler ===", res);
                 this.orders = res.data.data;
-
-
-                //console.log("siparişler ===", this.orders)
-
                 this.orders.forEach(element => {
                     element.originalStatus = element.durum?.toUpperCase() || '';
 
                     const statusMap = {
                         CREATED: "Oluşturuldu",
-                        SHIPPED: "Taşıma Durumunda",
                         PICKING: "İşleme Alındı",
+                        SHIPPED: "Taşıma Durumunda",
                         DELIVERED: "Teslim Edildi",
                         INVOICED: "Faturalandı",
                         CANCELLED: "İptal Edildi",
@@ -211,13 +267,70 @@ export default {
         }
 
         ,
+        async loadReturnedOrders() {
+            try {
+                this.isLoading = true;
+                const userId = localStorage.getItem("kullanici_id");
+                // backend endpoint durum parametresiyle iade siparişlerini çekiyor
+                const res = await api.get(`/api/Siparisler/kullanici/${userId}?durum=RETURNED`);
+                this.orders = res.data.data;
 
-        selectStatus(statusKey) {
+                // Durumları eşle
+                this.orders.forEach(order => {
+                    order.originalStatus = order.durum?.toUpperCase() || '';
+                    const statusMap = {
+                        RETURNED: "İade Edildi",
+                        // diğer statüler
+                        CREATED: "Oluşturuldu",
+                        PICKING: "İşleme Alındı",
+                        SHIPPED: "Taşıma Durumunda",
+                        DELIVERED: "Teslim Edildi",
+                        INVOICED: "Faturalandı",
+                        CANCELLED: "İptal Edildi",
+                        UNDELIVERED: "Teslim Edilemedi"
+                    };
+                    order.durum = statusMap[order.originalStatus] || order.originalStatus;
+                });
+
+                this.updateStatusCounts();
+            } catch (err) {
+                console.error("İade siparişler yüklenemedi", err);
+            } finally {
+                this.isLoading = false;
+            }
+        }
+        ,
+        async selectStatus(statusKey) {
             this.selectedStatus = statusKey;
+            if (statusKey === 'RETURNED') {
+                await this.loadReturnedOrders(); // iade siparişleri yükle
+            } else {
+                await this.loadOrders(statusKey); // normal siparişler
+            }
+        }
+        ,
+        async iptalTelegram(orderId) {
+            try {
+                const res = await api.post(`/api/entegrasyonlar/send-iptal-telegram/${orderId}`);
+
+                if (res.data.sent) {
+                    alert("İptal bilgisi Telegram'a gönderildi.");
+                } else {
+                    alert("Gönderilemedi.");
+                }
+            } catch (err) {
+                console.error("İptal telegram hatası:", err);
+                alert("Hata oluştu.");
+            }
         },
 
         async sendTelegram(orderId) {
+            if (this.isSendingTelegram) return; // zaten gönderim varsa engelle
+
+            this.isSendingTelegram = true;
+            this.sendingOrderId = orderId;
             try {
+
                 const res = await api.post(`/api/entegrasyonlar/send-siparis-telegram/${orderId}`);
                 if (res.data.sent) {
                     const toastEl = document.getElementById('successToast');
@@ -232,6 +345,10 @@ export default {
             } catch (err) {
                 console.error(err);
                 alert("Hata oluştu.");
+            }
+            finally {
+                this.isSendingTelegram = false;
+                this.sendingOrderId = null;
             }
         },
 
@@ -252,6 +369,13 @@ export default {
         },
 
         async openDetailModal(order) {
+            // URL’ye orderNumber parametresini ekle
+            this.$router.push({
+                path: this.$route.path,
+                query: { orderNumber: order.siparisNumarasi }
+            });
+
+            // Modal’ı aç
             this.selectedOrder = order;
             await nextTick();
             if (this.$refs.orderModal && typeof this.$refs.orderModal.showModal === 'function') {
@@ -289,7 +413,54 @@ export default {
                 const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
                 return { text: `${diffDays} gün ${diffHours} saat ${diffMinutes} dakika kaldı`, class: "badge bg-success" };
             }
-        }
+        },
+        async printSelectedOrders() {
+            if (this.selectedOrders.length === 0) return;
+            if (this.isSendingTelegram) return; // zaten gönderim varsa engelle
+
+            // 1. Kullanıcıya sor: Telegrama gitsin mi?
+            const sendToTelegram = confirm("Oluşturulan toplu PDF Telegram'a gönderilsin mi?");
+
+            this.isPdfLoading = true;
+            try {
+                // 2. Backend'e 'sendTelegram' parametresini de ekleyerek gönderiyoruz
+                const response = await api.post('/api/Entegrasyonlar/toplu-pdf', {
+                    orderIds: this.selectedOrders,
+                    SendToTelegram: sendToTelegram // büyük S!
+                }, {
+                    responseType: 'blob'
+                });
+
+
+                const file = new Blob([response.data], { type: 'application/pdf' });
+                const fileURL = URL.createObjectURL(file);
+                window.open(fileURL, '_blank');
+
+                this.isBulkSendingTelegram = true;
+                // 4. Eğer telegrama gönderildiyse kullanıcıya bilgi ver
+                if (sendToTelegram) {
+                    // İsteğe bağlı olarak toast mesajı da tetikleyebilirsin
+                    const toastEl = document.getElementById('successToast');
+                    if (toastEl) {
+                        const toast = new bootstrap.Toast(toastEl);
+                        toast.show();
+                    }
+                }
+
+            } catch (err) {
+                console.error("PDF Hatası:", err);
+                alert("PDF işlemi sırasında bir hata meydana geldi.");
+            } finally {
+                this.isPdfLoading = false;
+                this.isBulkSendingTelegram = false;   // toplu işlem bittikten sonra kapat
+                this.sendingOrderId = null;       // tekli sipariş gönderimi için de sıfırlama
+                this.selectedOrders.forEach(id => {
+                    const order = this.orders.find(o => o.id === id);
+                    if (order) order.telegramSent = true;
+                });
+                this.selectedOrders = []
+            }
+        },
 
 
 
@@ -303,21 +474,35 @@ export default {
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h2>Trendyol Siparişleri</h2>
             <!-- 🔍 Arama Inputu -->
-            <input v-model="searchQuery" type="text" class="form-control w-25"
-                placeholder="Sipariş no, müşteri adı veya ürün adı ara..." />
+
         </div>
-        <div class="d-flex gap-2 mb-3">
+
+        <div class="d-flex  gap-2 mb-3 justify-content-start align-items-center flex-wrap responsive-controls">
+            <input v-model="searchQuery" type="text" class=" form-control w-100"
+                placeholder="Sipariş no, müşteri adı veya ürün adı ara..." />
             <select class="form-select w-auto" v-model="selectedShippingCompany">
                 <option disabled value="">Kargo Seç</option>
                 <option v-for="company in cargoOptions" :key="company.value" :value="company.value">
                     {{ company.label }}
                 </option>
             </select>
+
             <button class="btn btn-success" :disabled="!selectedShippingCompany || selectedOrders.length === 0"
                 @click="updateShippingCompany">
                 Kargo Firmasını Güncelle
             </button>
+            <button class="btn btn-dark text-white ms-2" :disabled="selectedOrders.length === 0"
+                @click="printSelectedOrders">
+                <span v-if="isPdfLoading" class="spinner-border spinner-border-sm me-1"></span>
+                <span v-else class="material-icons align-middle me-1">print</span>
+                {{ isPdfLoading ? 'Hazırlanıyor...' : 'Seçilenleri Yazdır (PDF)' }}
+            </button>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="gonderilmeyenler" v-model="gonderilmeyenler" />
+                <label class="form-check-label" for="gonderilmeyenler">Sadece Gönderilmeyenler</label>
+            </div>
         </div>
+
 
         <!-- Durum Tabları -->
         <div class="d-flex flex-wrap gap-2 mb-3">
@@ -335,7 +520,24 @@ export default {
                 </span>
             </button>
         </div>
+        <div class="d-flex justify-content-between">
+            <div v-if="selectedOrders" class="mt-2">
+                <b>Seçilen Sipariş Sayısı:</b>
+                <span class="badge bg-primary">{{ selectedOrders.length }}</span>
+            </div>
+            <div class="d-flex justify-content-end mb-2 align-items-center gap-2">
+                <b>
+                    Listelenecek Ürün Sayısı:
+                </b>
 
+                <select v-model="pageSize" class="form-select form-select-sm" style="width:120px">
+                    <option :value="10">10</option>
+                    <option :value="20">20</option>
+                    <option :value="50">50</option>
+                    <option :value="100">100</option>
+                </select>
+            </div>
+        </div>
 
         <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999;">
             <div id="successToast" class="toast align-items-center text-bg-success border-0" role="alert"
@@ -359,7 +561,7 @@ export default {
         </div>
 
         <!-- Tablo -->
-        <div v-else class="table-responsive">
+        <div class="table-responsive">
             <table class="table dark:table-dark table-bordered table-hover">
                 <thead class="table-light">
                     <tr>
@@ -388,13 +590,26 @@ export default {
                             <div v-if="order.siparisUrunleri && order.siparisUrunleri.length > 0"
                                 class="d-flex flex-wrap justify-content-center align-items-start gap-2">
                                 <div v-for="(urunItem, i) in order.siparisUrunleri" :key="i"
-                                    class="d-flex flex-column align-items-center" style="width:100px;">
+                                    class="d-flex flex-column align-items-center position-relative"
+                                    style="width:100px;">
+
+                                    <!-- 📌 Adet Badge (sağ üst köşe) -->
+                                    <span v-if="urunItem.adet"
+                                        class="position-absolute top-0 end-0 translate-middle badge rounded-pill bg-primary"
+                                        style="font-size:0.7rem; padding:4px 6px; z-index:10;">
+                                        {{ urunItem.adet }}
+                                    </span>
+
+                                    <!-- Ürün görseli -->
                                     <img :src="urunItem.urun?.image" alt="Ürün Resmi"
                                         style="height:90px; object-fit:contain; border-radius:6px; border:1px solid #ddd;">
+
+                                    <!-- Ürün adı -->
                                     <div class="mt-1 text-truncate" style="font-size:0.75rem; width:100px;">
                                         {{ urunItem.urun?.ad }}
                                     </div>
                                 </div>
+
                             </div>
                             <div v-else>—</div>
                         </td>
@@ -433,25 +648,55 @@ export default {
 
 
                         <td class="text-center">
-                            <span v-if="order.telegramSent" class="text-success">
-                                <i class="bi bi-check-circle-fill"></i>
+                            <span v-if="order.durum === 'İptal Edildi'" class="text-danger">
+                                <span class="material-icons align-middle">cancel</span>
                             </span>
-                            <button v-else class="btn btn-primary btn-sm" @click="sendTelegram(order.id)">
-                                Gönder
+
+                            <span v-else-if="order.telegramSent" class="text-success">
+                                <span class="material-icons align-middle">check_circle</span>
+                            </span>
+
+                            <button v-else
+                                class="btn btn-primary btn-sm d-flex align-items-center justify-content-center gap-2"
+                                @click="sendTelegram(order.id)" :disabled="isSendingTelegram">
+                                <span v-if="sendingOrderId === order.id" class="spinner-border spinner-border-sm"
+                                    role="status" aria-hidden="true"></span>
+                                <span>{{ sendingOrderId === order.id ? "Gönderiliyor..." : "Gönder" }}</span>
                             </button>
+
+                            <button v-if="order.durum === 'İptal Edildi'"
+                                class="btn btn-primary btn-sm d-flex align-items-center justify-content-center gap-2"
+                                @click="iptalTelegram(order.id)">
+                                İptal Edildi gönder
+                            </button>
+
+
                         </td>
+
                         <td class="text-center">
                             <div class="d-flex flex-column gap-4 justify-content-center align-items-center h-100 w-100">
                                 <button class="btn btn-outline-primary btn-sm w-100" @click="openDetailModal(order)">
-                                    <i class="bi bi-eye"></i> Detay
+                                    <span class="material-icons align-middle">visibility</span> Detay
                                 </button>
 
+                                <!-- İşleme Al butonu -->
                                 <button v-if="order.durum" class="btn btn-sm w-100"
                                     :class="{ 'btn-warning': order.originalStatus !== 'PICKING', 'btn-success': order.originalStatus === 'PICKING' }"
-                                    @click="setPicking(order)" :disabled="order.originalStatus === 'PICKING'">
-                                    <i class="bi bi-arrow-repeat"></i>
+                                    @click="setPicking(order)"
+                                    :disabled="order.originalStatus === 'PICKING' || isGlobalLoading">
+                                    <span class="material-icons align-middle">autorenew</span>
                                     {{ order.originalStatus === 'PICKING' ? 'İşleme Alındı' : 'İşleme Al' }}
                                 </button>
+
+                                <!-- Tam ekran loading overlay -->
+                                <div v-if="isGlobalLoading"
+                                    class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+                                    style="z-index: 2000; background-color: rgba(220, 220, 220, 0.7);opacity: 0.05;">
+                                    <div class="text-center text-dark">
+                                        <div class="spinner-border text-success" role="status"></div>
+                                    </div>
+                                </div>
+
                             </div>
                         </td>
 
@@ -467,7 +712,7 @@ export default {
                 <tfoot v-if="paginatedOrders.length < 1">
                     <tr>
                         <td colspan="8" class="text-center py-4 text-secondary">
-                            <i class="fas fa-inbox fs-1 mb-2"></i>
+                            <span class="material-icons fs-1 mb-2 align-middle">inbox</span>
                             <p>{{ selectedStatus ? 'Bu durumda sipariş bulunmuyor' : 'Henüz sipariş yok' }}</p>
                         </td>
                     </tr>
@@ -478,16 +723,18 @@ export default {
         <!-- Pagination -->
         <div v-if="!isLoading && paginatedOrders.length > 0" class="d-flex justify-content-center mt-3 gap-2">
             <button class="btn btn-outline-secondary" :disabled="currentPage === 1" @click="currentPage--">
-                <i class="fas fa-chevron-left me-1"></i> Önceki
+                <span class="material-icons align-middle me-1">chevron_left</span> Önceki
             </button>
             <span class="align-self-center">
                 Sayfa {{ currentPage }} / {{ totalPages }} ({{ filteredOrders.length }} sipariş)
             </span>
             <button class="btn btn-outline-secondary" :disabled="currentPage === totalPages" @click="currentPage++">
-                Sonraki <i class="fas fa-chevron-right ms-1"></i>
+                Sonraki <span class="material-icons align-middle ms-1">chevron_right</span>
             </button>
         </div>
-        <SiparisDetayModal ref="orderModal" :order="selectedOrder" />
+        <SiparisDetayModal ref="orderModal" :order="selectedOrder" @close="handleModalClose" />
+
+
         <OtostickerLoginModal :show="showOtostickerModal" @close="showOtostickerModal = false" />
     </div>
 </template>
@@ -498,7 +745,7 @@ export default {
     border-color: #1e1e1e;
 }
 
-.btn-outline-primary .bi {
+.btn-outline-primary .material-icons {
     color: #1e1e1e;
 }
 
@@ -508,7 +755,7 @@ html[data-coreui-theme='dark'] .btn-outline-primary {
     border-color: #1e1e1e;
 }
 
-html[data-coreui-theme='dark'] .btn-outline-primary .bi {
+html[data-coreui-theme='dark'] .btn-outline-primary .material-icons {
     color: #1e1e1e;
 }
 </style>

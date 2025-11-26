@@ -10,7 +10,18 @@ namespace OtoEntegre.Api.Services
         public static Siparisler MapToSiparis(TrendyolOrderPayload payload, Entegrasyonlar entegrasyon)
         {
             var firstLine = payload.Lines?.FirstOrDefault();
-            var musteriAdSoyad = (payload.ShipmentAddress?.FirstName + " " + payload.ShipmentAddress?.LastName)?.Trim() ?? string.Empty;
+
+            // Mask kontrolü fonksiyonu
+            static string Clean(string value)
+            {
+                if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+                if (value.Contains("***")) return string.Empty;
+                return value.Trim();
+            }
+
+            var musteriAdSoyad = Clean($"{payload.ShipmentAddress?.FirstName} {payload.ShipmentAddress?.LastName}");
+            var musteriAdres = Clean(payload.ShipmentAddress?.FullAddress);
+            var kargoFirma = Clean(payload.CargoProviderName);
 
             return new Siparisler
             {
@@ -18,7 +29,7 @@ namespace OtoEntegre.Api.Services
                 EntegrasyonId = entegrasyon?.Id,
                 KullaniciId = entegrasyon?.Kullanici_Id,
                 SiparisNumarasi = payload.OrderNumber ?? string.Empty,
-                ToplamTutar = payload.GrossAmount-payload.TotalTyDiscount,
+                ToplamTutar = payload.GrossAmount - payload.TotalTyDiscount,
                 KargoUcreti = 0,
                 OdemeDurumu = string.Empty,
                 Durum = payload.Status ?? string.Empty,
@@ -29,16 +40,16 @@ namespace OtoEntegre.Api.Services
                 MusteriAdSoyad = musteriAdSoyad,
                 Renk = firstLine?.ProductColor ?? string.Empty,
                 Beden = firstLine?.ProductSize ?? string.Empty,
-                MusteriAdres = payload.ShipmentAddress?.FullAddress ?? string.Empty,
+                MusteriAdres = musteriAdres,
                 UrunTrendyolKod = firstLine?.ProductCode.ToString() ?? string.Empty,
                 CreatedAt = DateTimeOffset.FromUnixTimeMilliseconds(payload.OrderDate).UtcDateTime,
                 UpdatedAt = DateTime.UtcNow,
                 TelegramSent = false,
                 TedarikSent = false,
-                CargoProviderName = payload.CargoProviderName,
+                CargoProviderName = kargoFirma,
+                TrendyolSiparisId = payload.Id,
+
             };
         }
     }
 }
-
-

@@ -6,7 +6,7 @@ import ColorTheme from './ColorTheme.vue'
   <CRow>
     <CCol>
       <CCard>
-        <CCardHeader> <CIcon icon="cil-drop" /> Theme colors </CCardHeader>
+        <CCardHeader> <span class="material-icons">opacity</span> Theme colors </CCardHeader>
         <CCardBody>
           <CRow>
             <ColorTheme color="bg-primary">

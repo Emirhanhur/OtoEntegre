@@ -91,7 +91,7 @@
                       :active="state === 'active' ? true : false"
                       :disabled="state === 'disabled' ? true : false"
                     >
-                      <CIcon icon="cil-bell" class="me-2" />
+                      <span class="material-icons me-2">notifications</span>
                       {{ color.charAt(0).toUpperCase() + color.slice(1) }}
                     </CButton>
                   </template>
@@ -240,7 +240,7 @@
                       :disabled="state === 'disabled' ? true : false"
                       variant="ghost"
                     >
-                      <CIcon icon="cil-bell" class="me-2" />
+                      <span class="material-icons me-2">notifications</span>
                       {{ color.charAt(0).toUpperCase() + color.slice(1) }}
                     </CButton>
                   </template>
