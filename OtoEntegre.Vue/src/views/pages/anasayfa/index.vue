@@ -123,14 +123,12 @@ export default {
       }
       this.fetchOrdersOnly();
     },
-    // Sıralama ikonlarını belirle — artık Material Icons döndürüyor
+    // Sıralama ikonlarını belirle
     getSortIcon(field) {
       if (this.sortField !== field) {
-        return { name: 'unfold_more', extraClass: 'text-muted' };
+        return 'bi-arrow-down-up text-muted';
       }
-      return this.sortDirection === 'asc'
-        ? { name: 'arrow_upward', extraClass: 'text-primary' }
-        : { name: 'arrow_downward', extraClass: 'text-primary' };
+      return this.sortDirection === 'asc' ? 'bi-arrow-up text-primary' : 'bi-arrow-down text-primary';
     },
     async fetchDealerBalance() {
     try {
@@ -189,19 +187,19 @@ export default {
               <th @click="sortBy('code')" class="cursor-pointer user-select-none">
                 <div class="d-flex align-items-center gap-2">
                   Sipariş No
-                  <span class="material-icons" :class="getSortIcon('code').extraClass">{{ getSortIcon('code').name }}</span>
+                  <i :class="getSortIcon('code')" class="bi"></i>
                 </div>
               </th>
               <th @click="sortBy('overall')" class="cursor-pointer user-select-none">
                 <div class="d-flex align-items-center gap-2">
                   Toplam Tutar
-                  <span class="material-icons" :class="getSortIcon('overall').extraClass">{{ getSortIcon('overall').name }}</span>
+                  <i :class="getSortIcon('overall')" class="bi"></i>
                 </div>
               </th>
               <th @click="sortBy('createdAt')" class="cursor-pointer user-select-none">
                 <div class="d-flex align-items-center gap-2">
                   Tarih
-                  <span class="material-icons" :class="getSortIcon('createdAt').extraClass">{{ getSortIcon('createdAt').name }}</span>
+                  <i :class="getSortIcon('createdAt')" class="bi"></i>
                 </div>
               </th>
               <th>Detay</th>

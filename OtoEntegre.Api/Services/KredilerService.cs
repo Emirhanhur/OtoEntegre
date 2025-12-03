@@ -40,43 +40,49 @@ namespace OtoEntegre.Api.Services
             {
                 // Fetch existing krediler row (if any) and decrement in a tracked, transactional way
                 var kred = await _db.Krediler.FirstOrDefaultAsync(k => k.KullaniciId == kullaniciId);
-                if (kred == null)
-                {
-                    // No existing record: create one with -1 balance
-                    kred = new Krediler
-                    {
-                        Id = Guid.NewGuid(),
-                        KullaniciId = kullaniciId,
-                        KalanKredi = -1,
-                        SonSatinAlim = DateTime.UtcNow
-                    };
-                    _db.Krediler.Add(kred);
-                }
-                else
-                {
-                    // Decrement the tracked entity so EF will persist the correct new balance
-                    kred.KalanKredi -= 1;
-                    kred.SonSatinAlim = DateTime.UtcNow;
-                    _db.Krediler.Update(kred);
-                }
-                await _db.SaveChangesAsync();
+                 if (kred == null)
+        {
+            kred = new Krediler
+            {
+                Id = Guid.NewGuid(),
+                KullaniciId = kullaniciId,
+                KalanKredi = 0,
+                SonSatinAlim = null
+            };
+            _db.Krediler.Add(kred);
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+            return false; // kredi yok, tüketim yok
+        }
 
-                var islemi = new KrediIslemleri
-                {
-                    Id = Guid.NewGuid(),
-                    KullaniciId = kullaniciId,
-                    Miktar = -1,
-                    Tip = "Harcandı",
-                    BalanceAfter = kred.KalanKredi,
-                    Referans = referans,
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedBy = performedBy
-                };
-                _db.KrediIslemleri.Add(islemi);
-                await _db.SaveChangesAsync();
+        // Kredisi 0 veya altı ise tüketme
+        if (kred.KalanKredi <= 0)
+        {
+            await tx.CommitAsync();
+            return false;
+        }
 
-                await tx.CommitAsync();
-                return true;
+        // Tüketim
+        kred.KalanKredi -= 1;
+        kred.SonSatinAlim = DateTime.UtcNow;
+        _db.Krediler.Update(kred);
+
+        var islemi = new KrediIslemleri
+        {
+            Id = Guid.NewGuid(),
+            KullaniciId = kullaniciId,
+            Miktar = -1,
+            Tip = "Harcandı",
+            BalanceAfter = kred.KalanKredi,
+            Referans = referans,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = performedBy
+        };
+        _db.KrediIslemleri.Add(islemi);
+
+        await _db.SaveChangesAsync();
+        await tx.CommitAsync();
+        return true;
             }
             catch
             {

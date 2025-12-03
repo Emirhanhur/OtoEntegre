@@ -598,18 +598,18 @@ namespace OtoEntegre.Api.Controllers
             public string? Category3 { get; set; }
             public string? Category4 { get; set; }
         }
-[HttpGet("by-order-number/{orderNumber}")]
-public async Task<IActionResult> GetByOrderNumber(string orderNumber)
-{
-    var siparis = await _appDbContext.Siparisler
-        .Include(x => x.SiparisUrunleri)
-        .FirstOrDefaultAsync(x => x.SiparisNumarasi == orderNumber);
+        [HttpGet("by-order-number/{orderNumber}")]
+        public async Task<IActionResult> GetByOrderNumber(string orderNumber)
+        {
+            var siparis = await _appDbContext.Siparisler
+                .Include(x => x.SiparisUrunleri)
+                .FirstOrDefaultAsync(x => x.SiparisNumarasi == orderNumber);
 
-    if (siparis == null)
-        return NotFound(new { message = "Sipariş bulunamadı" });
+            if (siparis == null)
+                return NotFound(new { message = "Sipariş bulunamadı" });
 
-    return Ok(siparis);
-}
+            return Ok(siparis);
+        }
 
 
         [HttpGet("dealer-by-user")]
@@ -1166,6 +1166,25 @@ public async Task<IActionResult> GetByOrderNumber(string orderNumber)
                 {
                     foreach (var urunItem in siparis.SiparisUrunleri)
                     {
+                        long? productCode = null;
+
+                        // Ürün kodu hangi alandaysa ona göre al
+
+                        productCode = Convert.ToInt64(urunItem.Urun.ProductCode);
+
+                        if (productCode == null)
+                        {
+                            urunItem.EslestiMi = false;
+                            continue;
+                        }
+
+                        var match = await _appDbContext.Otosticker_Urunler
+                            .FirstOrDefaultAsync(x =>
+                                x.KullaniciId == siparis.KullaniciId &&
+                                x.ProductCode == productCode);
+
+                        urunItem.EslestiMi = match != null;
+
                         string? imageUrl = null;
 
                         // Önce siparis_dosyalari tablosuna bak
@@ -1181,6 +1200,15 @@ public async Task<IActionResult> GetByOrderNumber(string orderNumber)
 
                         urunItem.Urun.Image = imageUrl;
                     }
+                    var eslesmis = siparis.SiparisUrunleri.Count(x => x.EslestiMi);
+                    var toplam = siparis.SiparisUrunleri.Count;
+
+                    if (eslesmis == 0)
+                        siparis.EslestirmeDurumu = "hic_eslesmedi";
+                    else if (eslesmis == toplam)
+                        siparis.EslestirmeDurumu = "tum_eslesti";
+                    else
+                        siparis.EslestirmeDurumu = "kismi_eslesme";
                 }
 
                 // Her siparişe SellerId ekle
@@ -1297,61 +1325,61 @@ public async Task<IActionResult> GetByOrderNumber(string orderNumber)
         }
 
 
-     [HttpGet("{value}/urunler")]
-public async Task<IActionResult> GetSiparisUrunleri(string value)
-{
-    // value hem Guid hem SiparisNumarasi olabilir
+        [HttpGet("{value}/urunler")]
+        public async Task<IActionResult> GetSiparisUrunleri(string value)
+        {
+            // value hem Guid hem SiparisNumarasi olabilir
 
-    Guid siparisGuid;
-    var siparisQuery = _appDbContext.Siparisler.AsQueryable();
+            Guid siparisGuid;
+            var siparisQuery = _appDbContext.Siparisler.AsQueryable();
 
-    // 1️⃣ Önce GUID mi kontrol et
-    if (Guid.TryParse(value, out siparisGuid))
-    {
-        siparisQuery = siparisQuery.Where(s => s.Id == siparisGuid);
-    }
-    else
-    {
-        // 2️⃣ Değilse SiparisNumarasi’na göre ara
-        siparisQuery = siparisQuery.Where(s => s.SiparisNumarasi == value);
-    }
+            // 1️⃣ Önce GUID mi kontrol et
+            if (Guid.TryParse(value, out siparisGuid))
+            {
+                siparisQuery = siparisQuery.Where(s => s.Id == siparisGuid);
+            }
+            else
+            {
+                // 2️⃣ Değilse SiparisNumarasi’na göre ara
+                siparisQuery = siparisQuery.Where(s => s.SiparisNumarasi == value);
+            }
 
-    var siparis = await siparisQuery.FirstOrDefaultAsync();
+            var siparis = await siparisQuery.FirstOrDefaultAsync();
 
-    if (siparis == null)
-        return NotFound(new { message = "Sipariş bulunamadı." });
+            if (siparis == null)
+                return NotFound(new { message = "Sipariş bulunamadı." });
 
-    // 3️⃣ Ürünleri çek
-    var urunler = await (from su in _appDbContext.SiparisUrunleri
-                         join u in _appDbContext.Urunler on su.Urun_Id equals u.Id
-                         join d in _appDbContext.SiparisDosyalari
-                             on u.Image equals d.Dosya_Url into dosyalar
-                         from d in dosyalar.DefaultIfEmpty()
-                         where su.Siparis_Id == siparis.Id && (d == null || d.Dosya_Turu == "image")
-                         select new
-                         {
-                             u.Id,
-                             u.Ad,
-                             u.ProductCode,
-                             Image = u.Image ?? string.Empty,
-                             su.Adet,
-                             su.Toplam_Fiyat,
-                             su.SiparisNotu
-                         }).ToListAsync();
+            // 3️⃣ Ürünleri çek
+            var urunler = await (from su in _appDbContext.SiparisUrunleri
+                                 join u in _appDbContext.Urunler on su.Urun_Id equals u.Id
+                                 join d in _appDbContext.SiparisDosyalari
+                                     on u.Image equals d.Dosya_Url into dosyalar
+                                 from d in dosyalar.DefaultIfEmpty()
+                                 where su.Siparis_Id == siparis.Id && (d == null || d.Dosya_Turu == "image")
+                                 select new
+                                 {
+                                     u.Id,
+                                     u.Ad,
+                                     u.ProductCode,
+                                     Image = u.Image ?? string.Empty,
+                                     su.Adet,
+                                     su.Toplam_Fiyat,
+                                     su.SiparisNotu
+                                 }).ToListAsync();
 
-    // Aynı ürünü tekilleştir
-    var tekUrunler = urunler
-        .GroupBy(x => x.Id)
-        .Select(g => g.First())
-        .ToList();
+            // Aynı ürünü tekilleştir
+            var tekUrunler = urunler
+                .GroupBy(x => x.Id)
+                .Select(g => g.First())
+                .ToList();
 
-    return Ok(new
-    {
-        siparisId = siparis.Id,
-        SiparisNo = siparis.SiparisNumarasi,
-        Urunler = tekUrunler
-    });
-}
+            return Ok(new
+            {
+                siparisId = siparis.Id,
+                SiparisNo = siparis.SiparisNumarasi,
+                Urunler = tekUrunler
+            });
+        }
 
 
         //VERİTABANINDAN KULLANICI BAZLI SİPARİŞ SAYISINI ÇEKER
@@ -1603,7 +1631,17 @@ public async Task<IActionResult> GetSiparisUrunleri(string value)
                 }
 
                 // Diğer başarısız durumlar
-                if (!putResponse.IsSuccessStatusCode)
+                
+
+if (putBody.Contains("pudodelivery", StringComparison.OrdinalIgnoreCase))
+{
+    return Ok(new {
+        success = false,
+        message = "Bu sipariş Teslimat Noktası (PUDO) gönderisi olduğu için kargo firması Trendyol tarafından değiştirilemez.",
+        trendyolResponse = putBody
+    });
+}
+if (!putResponse.IsSuccessStatusCode)
                 {
                     return StatusCode((int)putResponse.StatusCode, new
                     {
@@ -1612,8 +1650,6 @@ public async Task<IActionResult> GetSiparisUrunleri(string value)
                         trendyolResponse = putBody
                     });
                 }
-
-
                 // 🔹 Sipariş numarasını bulalım (packageId değil)
                 var siparis = await _appDbContext.Siparisler
                     .FirstOrDefaultAsync(s => s.PaketNumarasi == packageId.ToString() && s.EntegrasyonId == request.EntegrasyonId);

@@ -20,9 +20,10 @@ namespace OtoEntegre.Api.Controllers
         private readonly TrendyolService _trendyolService;
         private readonly AppDbContext _dbContext;
         private readonly IHttpClientFactory _httpClientFactory;
-
+        private readonly OtostickerService _otostickerService; // YENİ
         public UrunlerController(
             IHttpClientFactory httpClientFactory,
+            OtostickerService otostickerService,
             IGenericRepository<Urunler> repo,
             EntegrasyonService entegrasyonService,
             TrendyolService trendyolService,
@@ -31,6 +32,8 @@ namespace OtoEntegre.Api.Controllers
             _repo = repo;
             _entegrasyonService = entegrasyonService;
             _trendyolService = trendyolService;
+            _httpClientFactory = httpClientFactory;
+            _otostickerService = otostickerService;
             _dbContext = dbContext;
         }
 
@@ -341,19 +344,19 @@ namespace OtoEntegre.Api.Controllers
 
         [HttpGet("trendyol/{kullaniciId}")]
         public async Task<IActionResult> GetTrendyolProducts(
-     Guid kullaniciId,
-     string? search = null,
-     string? barcode = null,
-     bool? approved = null,      // ✅ onaylı filtre
-     bool? archived = null,      // ✅ arşivlenmiş filtre
-     bool? onSale = null,        // ✅ satışta filtre
-     bool? rejected = null,      // ✅ reddedilen filtre
-     bool? blacklisted = null,   // ✅ blacklist filtre
-     int page = 0,
-     int size = 50)
+    Guid kullaniciId,
+    string? search = null,
+    string? barcode = null,
+    bool? approved = null,      // ✅ onaylı filtre
+    bool? archived = null,      // ✅ arşivlenmiş filtre
+    bool? onSale = null,        // ✅ satışta filtre
+    bool? rejected = null,      // ✅ reddedilen filtre
+    bool? blacklisted = null,   // ✅ blacklist filtre
+    int page = 0,
+    int size = 100)
         {
             var entegrasyon = (await _entegrasyonService.GetAllAsync())
-                                .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
+                                        .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
 
             if (entegrasyon == null)
                 return NotFound("Kullanıcının Trendyol entegrasyonu bulunamadı.");
@@ -362,6 +365,7 @@ namespace OtoEntegre.Api.Controllers
 
             try
             {
+                // 1. Trendyol Ürünlerini Al
                 var resp = await _trendyolService.GetProductsAsync(
                     supplierId,
                     entegrasyon.Api_Key,
@@ -380,6 +384,16 @@ namespace OtoEntegre.Api.Controllers
                 if (resp == null)
                     return StatusCode(502, "Trendyol API'den ürün yanıtı alınamadı.");
 
+                
+                var otostickerEslesmeleri = await _dbContext.Otosticker_Urunler
+                    .Where(x => x.KullaniciId == kullaniciId)
+                    .Select(x => x.ProductCode) // Sadece ProductCode'ları alıp performansı artırabiliriz.
+                    .ToListAsync();
+
+                
+                var eslesenProductCodes = new HashSet<long?>(otostickerEslesmeleri);
+
+                // 3. Ürünleri map'lerken Otosticker eşleşme durumunu ekle
                 var mapped = resp.content.Select(p => new
                 {
                     productCode = p.productCode,
@@ -407,7 +421,9 @@ namespace OtoEntegre.Api.Controllers
                         a.attributeValue,
                         a.attributeValueId
                     }),
-                    images = (object[])(p.images?.Select(i => new { url = i.url }).ToArray() ?? Array.Empty<object>())
+                    images = (object[])(p.images?.Select(i => new { url = i.url }).ToArray() ?? Array.Empty<object>()),
+                    // 👇 YENİ ALAN: Otosticker ile eşleşme kontrolü
+                    otostickerEslesme = eslesenProductCodes.Contains(p.productCode)
                 }).ToList();
 
                 return Ok(new
@@ -572,6 +588,135 @@ namespace OtoEntegre.Api.Controllers
                 return StatusCode(500, new { error = ex.Message });
             }
         }
+
+        // UrunlerController.cs dosyasının içine, diğer DTO'ların yanına ekleyin
+        public class OtostickerMatchDto
+        {
+            public string TrendyolBarcode { get; set; } = string.Empty;
+            public string OtostickerBarcode { get; set; } = string.Empty;
+            public Guid? KullaniciId { get; set; } // Gerekli değil ama güvenlik için tutulabilir
+            public long? ProductCode { get; set; }
+            public Guid? PlatformId { get; set; }
+        }
+
+        [HttpPost("match-otosticker-barcode")]
+        public async Task<IActionResult> MatchOtostickerBarcode([FromBody] OtostickerMatchDto dto)
+        {
+            // 1. Zorunlu alan kontrolleri
+            if (string.IsNullOrWhiteSpace(dto.TrendyolBarcode) || string.IsNullOrWhiteSpace(dto.OtostickerBarcode))
+                return BadRequest(new { success = false, message = "Trendyol ve Otosticker barkodları gereklidir." });
+
+            if (dto.KullaniciId == null)
+                return BadRequest("KullaniciId gereklidir.");
+
+            if (dto.PlatformId == null)
+                return BadRequest("PlatformId gereklidir.");
+
+            Guid merchantId = dto.KullaniciId.Value;
+            Guid platformId = dto.PlatformId.Value;
+
+            // 2. Kullanıcı entegrasyonunu kontrol et
+            var entegrasyon = await _dbContext.Entegrasyonlar
+                .FirstOrDefaultAsync(e => e.Kullanici_Id == merchantId);
+
+            if (entegrasyon == null)
+                return BadRequest("Entegrasyon bulunamadı.");
+
+            if (entegrasyon.Seller_Id == null)
+                return BadRequest("Entegrasyon.Seller_Id hatalı.");
+
+            // 3. Trendyol ürün kontrolü
+            var products = await _trendyolService.GetProductsByBarcodesAsync(
+                entegrasyon.Seller_Id.Value,
+                entegrasyon.Api_Key,
+                entegrasyon.Api_Secret,
+                new List<string> { dto.TrendyolBarcode }
+            );
+
+            if (products == null || !products.Any())
+                return NotFound(new { success = false, message = $"Trendyol barkodu ({dto.TrendyolBarcode}) bulunamadı." });
+
+            // 4. Otosticker ürün kontrolü
+            var otostickerProduct = await _otostickerService.GetProductByBarcodeAsync(dto.OtostickerBarcode);
+
+            if (otostickerProduct == null)
+                return NotFound(new { success = false, message = $"Otosticker barkodu ({dto.OtostickerBarcode}) API'de bulunamadı." });
+
+            // 5. Kayıt var mı kontrol et
+            var matchEntry = await _dbContext.Otosticker_Urunler
+                .FirstOrDefaultAsync(o =>
+                    o.KullaniciId == merchantId &&
+                    o.PlatformId == platformId &&
+                    o.ProductCode == dto.ProductCode
+                );
+
+            if (matchEntry != null)
+            {
+                // Güncelle
+                matchEntry.UrunTedarikBarcode = dto.OtostickerBarcode;
+            }
+            else
+            {
+                // Yeni kayıt
+                var newMatch = new Otosticker_Urunler
+                {
+                    Id = Guid.NewGuid(),
+                    KullaniciId = merchantId,
+                    PlatformId = platformId,
+                    ProductCode = dto.ProductCode,
+                    UrunTedarikBarcode = dto.OtostickerBarcode,
+                };
+
+                _dbContext.Otosticker_Urunler.Add(newMatch);
+            }
+
+            await _dbContext.SaveChangesAsync();
+
+            return Ok(new
+            {
+                success = true,
+                message = $"Eşleme yapıldı: Trendyol ({dto.TrendyolBarcode}) → Otosticker ({dto.OtostickerBarcode})"
+            });
+        }
+        [HttpGet("otosticker/eslesme-kontrol")]
+        public async Task<IActionResult> GetEslesmeDurumu(Guid kullaniciId, string productCode)
+        {
+            if (kullaniciId == Guid.Empty || string.IsNullOrWhiteSpace(productCode))
+                return BadRequest("kullaniciId ve productCode zorunludur.");
+
+            var urun = await _dbContext.Otosticker_Urunler
+                .FirstOrDefaultAsync(x => x.KullaniciId == kullaniciId && x.ProductCode == Convert.ToInt64(productCode));
+
+            if (urun == null)
+            {
+                return Ok(new
+                {
+                    matched = false,
+                    data = (object?)null
+                });
+            }
+
+            return Ok(new
+            {
+                matched = true,
+                data = urun
+            });
+        }
+
+        // GET api/urunler/otosticker/eslesmeler/{kullaniciId}
+        [HttpGet("otosticker/eslesmeler/{kullaniciId}")]
+        public async Task<IActionResult> GetOtostickerEslesmeler(Guid kullaniciId)
+        {
+            if (kullaniciId == Guid.Empty)
+                return BadRequest("kullaniciId zorunludur.");
+
+            var list = await _dbContext.Otosticker_Urunler
+                .Where(x => x.KullaniciId == kullaniciId)
+                .ToListAsync();
+
+            return Ok(list);
+        }
+
 
         [HttpPost("update-price")]
 

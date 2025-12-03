@@ -10,7 +10,7 @@ export default {
       error: "",
       loading: false,
       showPassword: false,
-      
+
       // Reset password modal
       showResetModal: false,
       resetEmail: "",
@@ -41,11 +41,6 @@ export default {
         const decoded = jwtDecode(token);
 
         let roles = decoded.role;
-        if (!roles) {
-          console.warn("JWT içinde rol bulunamadı!");
-        } else if (Array.isArray(roles)) {
-          roles = roles[0];
-        }
 
         localStorage.setItem("rol", roles);
 
@@ -111,8 +106,8 @@ export default {
         <div class="mb-3">
           <label for="password" class="form-label">Şifre</label>
           <div class="input-group">
-            <input :type="showPassword ? 'text' : 'password'" id="password" class="form-control"
-                   v-model="password" required />
+            <input :type="showPassword ? 'text' : 'password'" id="password" class="form-control" v-model="password"
+              required />
             <button class="btn btn-outline-secondary" type="button" @click="showPassword = !showPassword">
               <span v-if="showPassword" class="material-icons">visibility_off</span>
               <span v-else class="material-icons">visibility</span>
@@ -146,7 +141,7 @@ export default {
           <button type="button" class="btn-close" @click="closeResetModal"></button>
         </div>
         <div class="modal-body">
-          <div v-if="resetMessage" :class="{'alert alert-success': resetSuccess, 'alert alert-danger': !resetSuccess}">
+          <div v-if="resetMessage" :class="{ 'alert alert-success': resetSuccess, 'alert alert-danger': !resetSuccess }">
             {{ resetMessage }}
           </div>
           <div class="mb-3">

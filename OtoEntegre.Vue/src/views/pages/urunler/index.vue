@@ -17,6 +17,7 @@ export default {
     },
     data() {
         return {
+            bayiId: localStorage.getItem("bayi_id"),
             productPrices: {},
             salePriceInput: 0,
             listPriceInput: 0,
@@ -28,6 +29,7 @@ export default {
             blacklistedFilter: null,
             barcodeFilter: "",
             products: [], // Trendyol ürünleri
+            otostickerBarcodes: {}, // Trendyol barkoduna karşılık gelen Otosticker barkodunu tutar
             selectedCategory: null, // artık ID tutacak
             productsTotal: 0,
             productsPage: 0,
@@ -48,7 +50,6 @@ export default {
             modalProduct: null,
             modalPrice: 0,
             modalStats: null,
-            _bsModalInstance: null,
             newImageUrl: "",
 
             newProduct: {
@@ -78,8 +79,6 @@ export default {
             brands: [],
             subCategories: [],
             selectedAttributes: {},
-            successMessage: "",
-            _addModalInstance: null,
             // Category filter
             cargoOptions: [
                 { value: "YKMP", label: "Yurtiçi Kargo" },
@@ -111,21 +110,11 @@ export default {
 
             categories: [],       // tüm kategori ağacı
             categoryPath: [{ id: null }], // kategori seçim yolu
-            newProduct: {
-                categoryId: null, // son seçilen kategori (alt kategori)
-                title: "",
-                brandId: null,
-                salePrice: 0,
-                stock: 0,
-                description: "",
-                imageUrl: "",
-            },
             categoryAttributes: [],
-            selectedAttributes: {},
-            successMessage: "",
         };
     },
     computed: {
+
         totalPages() {
             return Math.ceil(this.orders.length / this.pageSize) || 1;
         },
@@ -133,6 +122,9 @@ export default {
         paginatedOrders() {
             const start = (this.currentPage - 1) * this.pageSize;
             return this.orders.slice(start, start + this.pageSize);
+        },
+        isOtostickerEnabled() {
+            return String(this.bayiId) === '55';
         },
     },
     watch: {
@@ -174,24 +166,60 @@ export default {
             if (this.blacklistedFilter !== null) query.append("blacklisted", this.blacklistedFilter);
 
             const res = await api.get(`/api/urunler/trendyol/${kullaniciId}?${query.toString()}`);
-
-
-
             this.products = res.data.data ?? [];
-            this.products.forEach(product => {
+
+            for (const product of this.products) {
+                // otostickerId set et
+                const eslesmeRes = await api.get(`/api/urunler/otosticker/eslesme-kontrol?kullaniciId=${kullaniciId}&productCode=${product.productCode}`);
+                product.matched = eslesmeRes.data.matched;
+                if (eslesmeRes.data.matched)
+                    product.otosticker_id = eslesmeRes.data.data?.urunTedarikBarcode ?? null;
+
+                this.otostickerBarcodes[product.barcode] = product.otosticker_id || "";
                 this.productPrices[product.barcode] = {
                     salePrice: product.salePrice || 0,
                     listPrice: product.listPrice || 0,
                     quantity: product.stock || 0
                 };
-            });
+            }
 
-            this.categories = Array.from(new Set(this.products.map(p => p.category).filter(c => c && c.length > 0)));
             this.productsTotal = res.data.total;
             this.productsPage = res.data.page;
             this.isLoading = false;
         }
+
         ,
+        async matchOtostickerBarcode(p) {
+            const kullaniciId = localStorage.getItem("kullanici_id");
+            if (!kullaniciId) return alert("Kullanıcı bulunamadı");
+
+            const trendyolBarcode = p.barcode;
+            const otostickerBarcode = this.otostickerBarcodes[trendyolBarcode];
+            const productCode = String(p.productCode || ""); // 👈 ProductCode'u String'e dönüştür ve boşsa "" yap            
+            if (!otostickerBarcode) {
+                return alert("Lütfen bir Otosticker Barkodu girin.");
+            }
+
+            const req = {
+                TrendyolBarcode: trendyolBarcode,
+                OtostickerBarcode: otostickerBarcode,
+                ProductCode: productCode,
+                KullaniciId: kullaniciId,
+                PlatformId: "4cf98531-60ac-49e5-b9d2-08d77d8ce3fb" // Trendyol PlatformId'si
+
+            };
+
+            try {
+                // Bu endpoint'i C# Controller'da oluşturacağız
+                await api.post(`/api/urunler/match-otosticker-barcode`, req);
+                p.otosticker_id = otostickerBarcode; // Yerelde de güncelle
+                this.successMessage = `Trendyol Ürünü ${trendyolBarcode} Otosticker Barkodu ${otostickerBarcode} ile eşleştirildi.`;
+                setTimeout(() => this.successMessage = "", 3000);
+            } catch (err) {
+                console.error(err);
+                alert("Eşleştirme hatası");
+            }
+        },
         async updateProduct(p) {
             const kullaniciId = localStorage.getItem("kullanici_id");
             if (!kullaniciId) return alert("Kullanıcı bulunamadı");
@@ -292,62 +320,57 @@ export default {
 <template>
     <div class="container-fluid trendyol-page">
         <!-- Header -->
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3 class="fw-semibold mb-0">
-                <span class="material-icons text-primary me-2 align-middle">inventory_2</span> Trendyol Ürünlerim
-            </h3>
+        <h3 class="fw-semibold mb-0 text-center text-md-start mb-4">
+            <span class="material-icons text-primary me-2 align-middle">inventory_2</span> Trendyol Ürünlerim
+        </h3>
 
-            <div class="d-flex flex-wrap gap-2 align-items-center">
-                <button class="btn btn-primary" @click="$refs.addProductModal.openModal()">Yeni Ürün</button>
-                <button class="btn btn-primary" @click="$refs.addVariantProductModal.openVariantModal()">
-                    Yeni Varyant Ürün
+
+        <!-- Filters inside tab -->
+        <div class="filters-container mb-4 p-3 bg-white rounded-4 shadow-sm d-flex flex-wrap align-items-center gap-2">
+            <select class="form-select form-select-sm filter-select" v-model="approvedFilter"
+                @change="loadTrendyolProducts()">
+                <option :value="null">Onay Durumu (Tümü)</option>
+                <option :value="true">Onaylı</option>
+                <option :value="false">Onaysız</option>
+            </select>
+
+            <select class="form-select form-select-sm filter-select" v-model="archivedFilter"
+                @change="loadTrendyolProducts()">
+                <option :value="null">Arşiv Durumu (Tümü)</option>
+                <option :value="true">Arşivlenmiş</option>
+                <option :value="false">Arşivlenmemiş</option>
+            </select>
+
+            <select class="form-select form-select-sm filter-select" v-model="onSaleFilter"
+                @change="loadTrendyolProducts()">
+                <option :value="null">Satış Durumu (Tümü)</option>
+                <option :value="true">Satışta</option>
+                <option :value="false">Satışta Değil</option>
+            </select>
+
+            <select class="form-select form-select-sm filter-select" v-model="rejectedFilter"
+                @change="loadTrendyolProducts()">
+                <option :value="null">Reddedilen (Tümü)</option>
+                <option :value="true">Reddedilen</option>
+                <option :value="false">Reddedilmeyen</option>
+            </select>
+
+            <select class="form-select form-select-sm filter-select" v-model="blacklistedFilter"
+                @change="loadTrendyolProducts()">
+                <option :value="null">Black List (Tümü)</option>
+                <option :value="true">Black List</option>
+                <option :value="false">Black List Değil</option>
+            </select>
+
+            <div class="input-group input-group-sm ms-auto" style="max-width: 200px;">
+                <input type="text" class="form-control" placeholder="Barkod ile ara..." v-model="barcodeFilter"
+                    @keyup.enter="filterByBarcode">
+                <button class="btn btn-outline-secondary" type="button" @click="filterByBarcode">
+                    <span class="material-icons" style="font-size:16px;">search</span>
                 </button>
-                <!-- <button class="btn btn-success" @click="$refs.bulkUploadModal.openModal()">
-                    <span class="material-icons me-1 align-middle">file_download</span> Excel ile Toplu Yükle
-                </button> -->
             </div>
-            <div class="d-flex gap-2 flex-wrap mb-3">
-                <input type="text" class="form-control me-2" placeholder="Barkod ile ara..." v-model="barcodeFilter"
-                    @input="filterByBarcode" style="max-width: 180px;" />
-
-                <select class="form-select me-2" v-model="approvedFilter" @change="loadTrendyolProducts()"
-                    style="max-width: 180px;">
-                    <option :value="null">Onay Durumu (Tümü)</option>
-                    <option :value="true">Onaylı</option>
-                    <option :value="false">Onaysız</option>
-                </select>
-
-                <select class="form-select me-2" v-model="archivedFilter" @change="loadTrendyolProducts()"
-                    style="max-width: 180px;">
-                    <option :value="null">Arşiv Durumu (Tümü)</option>
-                    <option :value="true">Arşivlenmiş</option>
-                    <option :value="false">Arşivlenmemiş</option>
-                </select>
-
-                <select class="form-select me-2" v-model="onSaleFilter" @change="loadTrendyolProducts()"
-                    style="max-width: 180px;">
-                    <option :value="null">Satış Durumu (Tümü)</option>
-                    <option :value="true">Satışta</option>
-                    <option :value="false">Satışta Değil</option>
-                </select>
-
-                <select class="form-select me-2" v-model="rejectedFilter" @change="loadTrendyolProducts()"
-                    style="max-width: 180px;">
-                    <option :value="null">Reddedilen (Tümü)</option>
-                    <option :value="true">Reddedilen</option>
-                    <option :value="false">Reddedilmeyen</option>
-                </select>
-
-                <select class="form-select me-2" v-model="blacklistedFilter" @change="loadTrendyolProducts()"
-                    style="max-width: 180px;">
-                    <option :value="null">Black List (Tümü)</option>
-                    <option :value="true">Black List</option>
-                    <option :value="false">Black List Değil</option>
-                </select>
-            </div>
-
-
         </div>
+
         <div class="d-flex justify-content-end mb-2 align-items-center gap-2">
             Listelenecek Ürün Sayısı:
             <select class="form-select form-select-sm" style="width:120px" v-model.number="productsSize"
@@ -370,6 +393,7 @@ export default {
                             <th>Satış Fiyatı</th>
                             <th>Liste Fiyatı</th>
                             <th>Stok</th>
+                            <th v-if="isOtostickerEnabled">Otosticker Barkod Eşleştirme</th>
                             <th>Durum</th>
                         </tr>
                     </thead>
@@ -397,12 +421,30 @@ export default {
                                     @keyup.enter="updateProduct(p)" />
                             </td>
 
+
+
+
                             <td>
                                 <input type="number" class="form-control form-control-sm"
                                     v-model.number="productPrices[p.barcode].quantity" @click.stop
                                     @keyup.enter="updateProduct(p)" />
                             </td>
+                            <td v-if="isOtostickerEnabled" @click.stop>
 
+                                <div class="d-flex align-items-center gap-1">
+                                    <input type="text" class="form-control form-control  w-auto"
+                                        placeholder="Otosticker Barkodu" v-model="otostickerBarcodes[p.barcode]"
+                                        @keyup.enter="matchOtostickerBarcode(p)" />
+                                    <button class="btn btn-success btn-sm"
+                                        :disabled="!otostickerBarcodes[p.barcode] || otostickerBarcodes[p.barcode] === p.otosticker_id"
+                                        @click="matchOtostickerBarcode(p)">
+                                        <span class="material-icons align-middle" style="font-size: 16px;">link</span>
+                                    </button>
+                                </div>
+                                <small v-if="p.otosticker_id" class="text-success d-block mt-1">
+                                    <span class="material-icons align-middle" style="font-size: 20px;">check</span>
+                                </small>
+                            </td>
                             <td>
                                 <button class="btn btn-outline-primary btn-sm" @click.stop="openProductModal(p)">
                                     Detay
@@ -530,5 +572,46 @@ export default {
 .fade-enter-from,
 .fade-leave-to {
     opacity: 0;
+}
+
+
+
+
+.btn-group .btn.active {
+    background-color: #0d6efd;
+    color: #fff;
+    border-color: #0d6efd;
+}
+
+
+
+
+/* Tabs */
+.nav-tabs .nav-link {
+    border-radius: 12px 12px 0 0;
+}
+
+.nav-tabs .nav-link.active {
+    background-color: #0d6efd;
+    color: #fff;
+}
+
+/* Filters inside tab */
+.filters-container {
+    border-radius: 12px;
+}
+
+.filter-select {
+    min-width: 150px;
+    max-width: 180px;
+    border-radius: 8px;
+}
+
+.input-group input {
+    border-radius: 8px 0 0 8px;
+}
+
+.input-group button {
+    border-radius: 0 8px 8px 0;
 }
 </style>

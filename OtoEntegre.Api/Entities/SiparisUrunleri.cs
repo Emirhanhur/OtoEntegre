@@ -37,5 +37,9 @@ public long? LineId { get; set; }
         [Column("merchant_sku")]
         public string? MerchantSku { get; set; }
 
+        [NotMapped]
+public bool EslestiMi { get; set; }
+
+
     }
 }

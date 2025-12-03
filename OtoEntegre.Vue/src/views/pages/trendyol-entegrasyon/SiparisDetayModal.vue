@@ -9,6 +9,7 @@ export default {
   data() {
     return {
       modalInstance: null,    // <- modal instance saklamak için
+      bayiId: localStorage.getItem("bayi_id"),
 
       selectedCargo: "",
       isLoading: false,
@@ -31,6 +32,9 @@ export default {
     };
   },
   computed: {
+    isOtostickerEnabled() {
+      return String(this.bayiId) === '55';
+    },
     mappedStatus() {
       const statusMap = {
         CREATED: "Oluşturuldu",
@@ -331,6 +335,7 @@ export default {
                   <th class="d-none d-md-table-cell">Adet</th>
                   <th v-if="windowWidth >= 768">Trendyol Kod</th>
                   <th>Not</th>
+                  <th v-if="isOtostickerEnabled">Eşleşme</th>
                 </tr>
               </thead>
               <tbody>
@@ -357,6 +362,15 @@ export default {
                       </button>
                     </div>
                   </td>
+                  <td v-if="isOtostickerEnabled">
+                    <div v-for="item in order.siparisUrunleri" :key="item.id">
+                      <span>{{ item.urun.adi }}</span>
+
+                      <span class="text-success"> <span class="material-icons align-middle">check_circle</span></span>
+                      <span class="text-danger">Eşleşmedi</span>
+                    </div>
+                  </td>
+
                 </tr>
               </tbody>
             </table>

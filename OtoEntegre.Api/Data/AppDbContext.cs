@@ -21,6 +21,7 @@ namespace OtoEntegre.Api.Data
         public DbSet<Dealer> Platformlar { get; set; }  // <- Bu olmalı
     public DbSet<Krediler> Krediler { get; set; }
         public DbSet<KrediIslemleri> KrediIslemleri { get; set; }
+        public DbSet<Otosticker_Urunler> Otosticker_Urunler { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

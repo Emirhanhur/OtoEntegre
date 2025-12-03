@@ -13,6 +13,8 @@ export default {
     data() {
         return {
             isBulkSendingTelegram: false,
+            bayiId: localStorage.getItem("bayi_id"),
+
             orders: [],
             isPdfLoading: false, // PDF yükleniyor durumu için
             selectedStatus: null,
@@ -68,6 +70,9 @@ export default {
         };
     },
     computed: {
+        isOtostickerEnabled() {
+            return String(this.bayiId) === '55';
+        },
         totalPages() {
             return Math.ceil(this.filteredOrders.length / this.pageSize) || 1;
         },
@@ -197,7 +202,7 @@ export default {
                 this.orders = res.data.data;
                 this.orders.forEach(element => {
                     element.originalStatus = element.durum?.toUpperCase() || '';
-
+                    element.hasOtostickerProduct = element.siparisUrunleri.some(su => su.urun.isOtostickerProduct); // Eğer detayda varsa
                     const statusMap = {
                         CREATED: "Oluşturuldu",
                         PICKING: "İşleme Alındı",
@@ -340,11 +345,18 @@ export default {
                     }
                     this.loadOrders(this.selectedStatus);
                 } else {
-                    alert("Gönderilemedi.");
+                    if (res.data.error) {
+                        alert(res.data.error);
+                    } else {
+                        alert("Gönderilemedi.");
+                    }
                 }
             } catch (err) {
-                console.error(err);
-                alert("Hata oluştu.");
+                if (err.response?.data?.error) {
+                    alert(err.response.data.error);
+                } else {
+                    alert("Hata oluştu.");
+                }
             }
             finally {
                 this.isSendingTelegram = false;
@@ -564,7 +576,7 @@ export default {
         <div class="table-responsive">
             <table class="table dark:table-dark table-bordered table-hover">
                 <thead class="table-light">
-                    <tr>
+                    <tr class="text-center">
                         <th>
                             <input type="checkbox" @change="toggleSelectAll($event)">
                         </th>
@@ -577,12 +589,15 @@ export default {
                         <!-- <th>Gecikme Durumu</th> -->
 
                         <th>Toplam</th>
-                        <th class="text-center">Mesaj Durumu</th>
-                        <th class="text-center">#</th>
+                        <th v-if="isOtostickerEnabled">Ürün Eşleştirmesi</th>
+                        <th>Mesaj Durumu</th>
+                        <th>#</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="(order) in paginatedOrders" :key="order.id">
+
+                    <tr v-for="(order) in paginatedOrders" :key="order.id" class="text-center">
+
                         <td>
                             <input type="checkbox" :value="order.id" v-model="selectedOrders">
                         </td>
@@ -645,6 +660,19 @@ export default {
                             {{order.siparisUrunleri.reduce((toplam, urun) => toplam + urun.toplam_Fiyat, 0).toFixed(2)}}
                         </td>
 
+                        <td v-if="isOtostickerEnabled" class="text-center">
+                            <div v-if="order.eslestirmeDurumu === 'tum_eslesti'" class="badge bg-success">
+                                Tüm ürünler eşleşti
+                            </div>
+
+                            <div v-else-if="order.eslestirmeDurumu === 'kismi_eslesme'" class="badge bg-warning">
+                                Kısmi eşleşme
+                            </div>
+
+                            <div v-else class="badge bg-danger">
+                                Ürünler eşleşmedi
+                            </div>
+                        </td>
 
 
                         <td class="text-center">
@@ -669,8 +697,6 @@ export default {
                                 @click="iptalTelegram(order.id)">
                                 İptal Edildi gönder
                             </button>
-
-
                         </td>
 
                         <td class="text-center">

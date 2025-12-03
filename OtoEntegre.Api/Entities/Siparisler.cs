@@ -114,6 +114,9 @@ namespace OtoEntegre.Api.Entities
         public int? SellerId { get; set; }
         public ICollection<SiparisUrunleri> SiparisUrunleri { get; set; } = new List<SiparisUrunleri>();
 
+        [NotMapped]
+        public string? EslestirmeDurumu { get; set; }
+
 
         [ForeignKey(nameof(EntegrasyonId))]
         public Entegrasyonlar? Entegrasyonlar { get; set; }

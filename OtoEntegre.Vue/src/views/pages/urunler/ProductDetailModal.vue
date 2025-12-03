@@ -252,11 +252,6 @@ export default {
                                             v-model.number="formData.categoryId" />
                                     </div>
                                 </div>
-                                {{ formData }}
-
-
-
-
                             </div>
 
                         </div>
