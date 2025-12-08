@@ -45,6 +45,11 @@ namespace OtoEntegre.Api.Services
             if (!VerifyPassword(dto.Password, user.Sifre_Hash))
                 return null;
 
+            // Update last login timestamp
+            user.Son_Giris = DateTime.UtcNow;
+            _userRepository.Update(user);
+            await _userRepository.SaveAsync();
+
             var token = await GenerateJwtTokenAsync(user);
             var userDto = MapToDto(user);
 
@@ -139,11 +144,13 @@ namespace OtoEntegre.Api.Services
                 Entegrasyon_Telefon = entegrasyonPhone,
                 Sifre_Hash = HashPassword(dto.Sifre),
                 Tedarik_Kullanici_Id = dto.Tedarik_Kullanici_Id,
+                Sehir = dto.Sehir,
+                Ilce = dto.Ilce,
                 Created_At = DateTime.UtcNow,
                 Updated_At = DateTime.UtcNow,
                 Telegram_Chat = dto.Telegram_Chat,
                 Telegram_Token = dto.Telegram_Token,
-
+                Deleted = false,
             };
 
             await _userRepository.AddAsync(newUser);
@@ -178,8 +185,8 @@ namespace OtoEntegre.Api.Services
             user.Telefon = useSame ? entegrasyonPhone : dto.Telefon;
             user.Entegrasyon_Telefon = entegrasyonPhone;
             user.Updated_At = DateTime.UtcNow;
-           user.Telegram_Chat = dto.Telegram_Chat ?? user.Telegram_Chat;
-user.Telegram_Token = dto.Telegram_Token ?? user.Telegram_Token;
+            user.Telegram_Chat = dto.Telegram_Chat ?? user.Telegram_Chat;
+            user.Telegram_Token = dto.Telegram_Token ?? user.Telegram_Token;
 
 
             _userRepository.Update(user);
@@ -207,7 +214,9 @@ user.Telegram_Token = dto.Telegram_Token ?? user.Telegram_Token;
             var user = await _userRepository.GetByIdAsync(id);
             if (user != null)
             {
-                _userRepository.Delete(user);
+                user.Deleted = true; // Veya IsDeleted = true;
+                _userRepository.Update(user);
+                // _userRepository.Delete(user);
                 await _userRepository.SaveAsync();
 
                 var userRole = (await _userRoleRepository.GetAllAsync())
@@ -259,6 +268,8 @@ user.Telegram_Token = dto.Telegram_Token ?? user.Telegram_Token;
                 Tedarik_Kullanici_Id = user.Tedarik_Kullanici_Id,
                 Created_At = user.Created_At,
                 Updated_At = user.Updated_At,
+                LastLogin = user.Son_Giris,
+                Deleted = user.Deleted,
                 Roller = user.Roller.Select(ur => new KullaniciRolDto
                 {
                     Id = ur.Id,
@@ -273,31 +284,41 @@ user.Telegram_Token = dto.Telegram_Token ?? user.Telegram_Token;
                 }).ToList()
             };
         }
-    
-    
+
+
         public async Task<bool> ResetPasswordAsync(string email, string newPassword)
-{
-    // Kullanıcıyı email ile bul
-  var user = (await _userRepository.GetAllAsync())
-    .FirstOrDefault(u => u.Email?.Trim().Equals(email.Trim(), StringComparison.OrdinalIgnoreCase) == true);
+        {
+            // Kullanıcıyı email ile bul
+            var user = (await _userRepository.GetAllAsync())
+              .FirstOrDefault(u => u.Email?.Trim().Equals(email.Trim(), StringComparison.OrdinalIgnoreCase) == true);
 
 
-    if (user == null)
-        return false;
+            if (user == null)
+                return false;
 
-    // Yeni şifreyi hashleyip kaydet
-    user.Sifre_Hash = BCrypt.Net.BCrypt.HashPassword(newPassword);
-    user.Updated_At = DateTime.UtcNow;
+            // Yeni şifreyi hashleyip kaydet
+            user.Sifre_Hash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            user.Updated_At = DateTime.UtcNow;
 
-    _userRepository.Update(user);
-    await _userRepository.SaveAsync();
+            _userRepository.Update(user);
+            await _userRepository.SaveAsync();
 
-    return true;
-}
+            return true;
+        }
+
+        public async Task RestoreAsync(Guid id)
+        {
+            var user = await _userRepository.GetByIdAsync(id);
+
+            if (user == null)
+                throw new Exception("Restore: Kullanıcı bulunamadı. Soft-delete filtresine takılıyor olabilirsin.");
+
+            user.Deleted = false;
+            user.Updated_At = DateTime.UtcNow;
+            _userRepository.Update(user);
+            await _userRepository.SaveAsync();
+        }
+
 
     }
 }
-
-
-
-

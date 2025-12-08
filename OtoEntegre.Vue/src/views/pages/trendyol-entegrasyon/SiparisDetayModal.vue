@@ -255,6 +255,16 @@ export default {
         console.error("Sipariş detayı alınamadı:", err);
         alert("Sipariş detayı alınamadı.");
       }
+    },
+    getEslestirmeDurumu(urun) {
+      if (!this.order?.siparisUrunleri || !urun) return false;
+
+      // SiparistekiUrunler'deki ürün ile order.siparisUrunleri'ndeki ürünü eşleştir
+      const siparisUrunu = this.order.siparisUrunleri.find(
+        item => item.urun_Id === urun.id || item.urun?.id === urun.id
+      );
+
+      return siparisUrunu?.eslestiMi === true;
     }
 
   }
@@ -363,11 +373,17 @@ export default {
                     </div>
                   </td>
                   <td v-if="isOtostickerEnabled">
-                    <div v-for="item in order.siparisUrunleri" :key="item.id">
-                      <span>{{ item.urun.adi }}</span>
-
-                      <span class="text-success"> <span class="material-icons align-middle">check_circle</span></span>
-                      <span class="text-danger">Eşleşmedi</span>
+                    <div v-if="getEslestirmeDurumu(urun)">
+                      <span class="text-success d-flex align-items-center justify-content-center">
+                        <i class="material-icons align-middle me-1">check_circle</i>
+                        <small>Eşleşti</small>
+                      </span>
+                    </div>
+                    <div v-else>
+                      <span class="text-danger d-flex align-items-center justify-content-center">
+                        <i class="material-icons align-middle me-1">cancel</i>
+                        <small>Eşleşmedi</small>
+                      </span>
                     </div>
                   </td>
 

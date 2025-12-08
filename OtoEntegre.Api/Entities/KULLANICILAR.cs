@@ -57,6 +57,13 @@ namespace OtoEntegre.Api.Entities
         [Column("tedarik_musteri_no")]
         public int? Tedarik_Musteri_No { get; set; }
 
+        [Column("deleted")]
+
+        public bool Deleted { get ; set;} 
+
+        [Column("son_giris")]
+        public DateTime? Son_Giris { get; set; }
+
         // Navigation
         public ICollection<KullaniciRolleri> Roller { get; set; } = new List<KullaniciRolleri>();
     }

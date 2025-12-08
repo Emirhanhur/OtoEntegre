@@ -882,5 +882,292 @@ namespace OtoEntegre.Api.Controllers
             public int? Quantity { get; set; }
         }
 
+        /// <summary>
+        /// Eşleştirilmiş ürünler için kar/zarar hesaplama endpoint'i
+        /// Hesaplama: Trendyol Satış Fiyatı - Trendyol Giderleri - Otosticker Maliyeti
+        /// </summary>
+        [HttpGet("kar-zarar/{kullaniciId}")]
+        public async Task<IActionResult> GetKarZararHesaplama(Guid kullaniciId)
+        {
+            try
+            {
+                // 1. Kullanıcının eşleştirilmiş ürünlerini al
+                var eslesmeler = await _dbContext.Otosticker_Urunler
+                    .Where(x => x.KullaniciId == kullaniciId && x.ProductCode.HasValue)
+                    .ToListAsync();
+
+                if (!eslesmeler.Any())
+                {
+                    return Ok(new
+                    {
+                        success = true,
+                        data = new List<object>(),
+                        message = "Eşleştirilmiş ürün bulunamadı."
+                    });
+                }
+
+                // 2. Entegrasyon bilgilerini al
+                var entegrasyon = (await _entegrasyonService.GetAllAsync())
+                    .FirstOrDefault(e => e.Kullanici_Id == kullaniciId);
+
+                if (entegrasyon == null || !entegrasyon.Seller_Id.HasValue)
+                {
+                    return NotFound("Kullanıcının Trendyol entegrasyonu bulunamadı.");
+                }
+
+                var supplierId = entegrasyon.Seller_Id.Value;
+
+                // 3. Eşleştirilmiş productCode'ları topla
+                var productCodes = eslesmeler
+                    .Where(e => e.ProductCode.HasValue)
+                    .Select(e => e.ProductCode!.Value)
+                    .ToList();
+
+                // 4. Trendyol'dan tüm ürünleri çek (sayfalama ile)
+                var allTrendyolProducts = new List<TrendyolProduct>();
+                int page = 0;
+                int size = 100;
+                bool hasMore = true;
+                var foundProductCodes = new HashSet<long>();
+
+                while (hasMore)
+                {
+                    var trendyolResponse = await _trendyolService.GetProductsAsync(
+                        supplierId,
+                        entegrasyon.Api_Key,
+                        entegrasyon.Api_Secret,
+                        page: page,
+                        size: size,
+                        search: null,
+                        barcode: null,
+                        approved: null,
+                        archived: null,
+                        onSale: null,
+                        rejected: null,
+                        blacklisted: null
+                    );
+
+                    if (trendyolResponse?.content == null || !trendyolResponse.content.Any())
+                    {
+                        hasMore = false;
+                        break;
+                    }
+
+                    // Sadece eşleştirilmiş ürünleri filtrele
+                    var matchedProducts = trendyolResponse.content
+                        .Where(p => productCodes.Contains(p.productCode) && !foundProductCodes.Contains(p.productCode))
+                        .ToList();
+
+                    foreach (var product in matchedProducts)
+                    {
+                        allTrendyolProducts.Add(product);
+                        foundProductCodes.Add(product.productCode);
+                    }
+
+                    // Eğer tüm eşleştirilmiş ürünler bulunduysa dur
+                    if (foundProductCodes.Count >= productCodes.Count || 
+                        trendyolResponse.content.Count < size)
+                    {
+                        hasMore = false;
+                    }
+                    else
+                    {
+                        page++;
+                    }
+                }
+
+                // 5. Son 90 günlük siparişlerden commission bilgilerini al (bir kere)
+                var startDate = DateTime.UtcNow.AddDays(-90);
+                var orders = await _trendyolService.GetOrdersAsync(
+                    supplierId,
+                    entegrasyon.Api_Key,
+                    entegrasyon.Api_Secret,
+                    startDate: startDate
+                );
+
+                // 6. Her eşleştirme için kar/zarar hesapla
+                var karZararListesi = new List<object>();
+
+                foreach (var eslesme in eslesmeler)
+                {
+                    if (!eslesme.ProductCode.HasValue)
+                        continue;
+
+                    var productCode = eslesme.ProductCode.Value;
+
+                    // 6.1. Trendyol ürün bilgilerini bul
+                    var trendyolProduct = allTrendyolProducts
+                        .FirstOrDefault(p => p.productCode == productCode);
+
+                    if (trendyolProduct == null)
+                        continue;
+
+                    decimal trendyolSatisFiyati = trendyolProduct.salePrice;
+
+                    // 6.2. Otosticker maliyet fiyatını al
+                    decimal otostickerMaliyet = 0;
+                    if (!string.IsNullOrWhiteSpace(eslesme.UrunTedarikBarcode))
+                    {
+                        var otostickerProduct = await _otostickerService.GetProductByBarcodeAsync(eslesme.UrunTedarikBarcode);
+                        if (otostickerProduct != null)
+                        {
+                            otostickerMaliyet = otostickerProduct.SalePrice;
+                        }
+                    }
+
+                    // 6.3. Trendyol giderlerini hesapla (commission + diğer giderler)
+                    decimal commissionOrani = 0.12m; // Varsayılan %12
+
+                    // Bu ürün için commission bilgisini bul
+                    var productOrders = orders
+                        .Where(o => o.Lines?.Any(l => l.ProductCode == productCode) == true)
+                        .ToList();
+
+                    if (productOrders.Any())
+                    {
+                        decimal toplamCommission = 0;
+                        decimal toplamSatisFiyati = 0;
+
+                        foreach (var order in productOrders)
+                        {
+                            var line = order.Lines?.FirstOrDefault(l => l.ProductCode == productCode);
+                            if (line != null && line.Commission.HasValue && line.Price > 0)
+                            {
+                                toplamCommission += line.Commission.Value;
+                                toplamSatisFiyati += line.Price;
+                            }
+                        }
+
+                        if (toplamSatisFiyati > 0)
+                        {
+                            commissionOrani = toplamCommission / toplamSatisFiyati;
+                        }
+                    }
+
+                    // Trendyol giderleri = Commission (şimdilik sadece commission)
+                    decimal trendyolGiderleri = trendyolSatisFiyati * commissionOrani;
+
+                    // 6.4. Kar/Zarar hesapla
+                    decimal karZarar = trendyolSatisFiyati - trendyolGiderleri - otostickerMaliyet;
+                    decimal karZararYuzdesi = otostickerMaliyet > 0 
+                        ? ((karZarar / otostickerMaliyet) * 100) 
+                        : 0;
+
+                    karZararListesi.Add(new
+                    {
+                        ProductCode = productCode,
+                        TrendyolBarcode = trendyolProduct.barcode ?? "",
+                        OtostickerBarcode = eslesme.UrunTedarikBarcode ?? "",
+                        UrunAdi = trendyolProduct.title ?? "",
+                        TrendyolSatisFiyati = trendyolSatisFiyati,
+                        TrendyolGiderleri = trendyolGiderleri,
+                        CommissionOrani = Math.Round(commissionOrani * 100, 2), // Yüzde olarak
+                        OtostickerMaliyet = otostickerMaliyet,
+                        KarZarar = Math.Round(karZarar, 2),
+                        KarZararYuzdesi = Math.Round(karZararYuzdesi, 2),
+                        Durum = karZarar > 0 ? "Kar" : karZarar < 0 ? "Zarar" : "Başabaş",
+                        Stock = trendyolProduct.quantity,
+                        Category = trendyolProduct.categoryName ?? "",
+                        Brand = trendyolProduct.brand ?? "",
+                        ProductUrl = trendyolProduct.productUrl ?? "",
+                        Images = trendyolProduct.images?.Select(i => i.url ?? "").Where(u => !string.IsNullOrEmpty(u)).ToList() ?? new List<string>()
+                    });
+                }
+
+                return Ok(new
+                {
+                    success = true,
+                    data = karZararListesi,
+                    toplamKarZarar = Math.Round(karZararListesi.Sum(x => (decimal)((dynamic)x).KarZarar), 2),
+                    toplamUrunSayisi = karZararListesi.Count
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = $"Kar/zarar hesaplama sırasında hata oluştu: {ex.Message}",
+                    error = ex.ToString()
+                });
+            }
+        }
+
+        /// <summary>
+        /// Ürün bazlı satış istatistikleri endpoint'i
+        /// Belirtilen gün sayısı içinde hangi ürünlerin ne kadar satıldığını gösterir
+        /// </summary>
+        [HttpGet("satis-istatistikleri/{kullaniciId}")]
+        public async Task<IActionResult> GetSatisIstatistikleri(Guid kullaniciId, [FromQuery] int gunSayisi = 30)
+        {
+            try
+            {
+                if (gunSayisi <= 0)
+                    return BadRequest("Gün sayısı 0'dan büyük olmalıdır.");
+
+                var now = DateTime.UtcNow.AddHours(3); // Turkish timezone (UTC+3) - calculate once
+                var baslangicTarihi = now.AddDays(-gunSayisi);
+                Console.WriteLine($"Calculating sales stats for user {kullaniciId} from {baslangicTarihi} to {now}");
+                // Sipariş ürünlerini çek (belirtilen tarih aralığında)
+                var siparisUrunleri = await _dbContext.SiparisUrunleri
+                    .Include(su => su.Urun)
+                    .Include(su => su.Siparis)
+                    .Where(su =>
+                        su.Siparis.KullaniciId == kullaniciId &&
+                        su.Siparis.CreatedAt >= baslangicTarihi)
+                    .ToListAsync();
+
+                // Ürün bazlı grupla ve istatistikleri hesapla
+                var istatistikler = siparisUrunleri
+                    .GroupBy(su => new
+                    {
+                        UrunId = su.Urun_Id,
+                        UrunAdi = su.Urun.Ad,
+                        ProductCode = su.Urun.ProductCode,
+                        Image = su.Urun.Image
+                    })
+                    .Select(g => new
+                    {
+                        urunId = g.Key.UrunId,
+                        urunAdi = g.Key.UrunAdi,
+                        productCode = g.Key.ProductCode,
+                        image = g.Key.Image ?? "",
+                        toplamSatilanAdet = g.Sum(x => x.Adet),
+                        toplamCiro = g.Sum(x => x.Toplam_Fiyat),
+                        ortalamaFiyat = g.Average(x => x.Birim_Fiyat),
+                        siparisSayisi = g.Select(x => x.Siparis_Id).Distinct().Count(),
+                        sonSatisTarihi = g.Max(x => x.Siparis.CreatedAt)
+                    })
+                    .OrderByDescending(x => x.toplamSatilanAdet)
+                    .ToList();
+
+                // Toplam benzersiz siparişleri hesapla
+                var toplamSiparisler = siparisUrunleri.Select(x => x.Siparis_Id).Distinct().Count();
+
+                return Ok(new
+                {
+                    success = true,
+                    period = gunSayisi == 1 ? "daily" : gunSayisi == 7 ? "weekly" : gunSayisi == 30 ? "monthly" : $"{gunSayisi}_days",
+                    gunSayisi = gunSayisi,
+                    baslangicTarihi = baslangicTarihi,
+                    bitisTarihi = DateTime.UtcNow,
+                    toplamSiparisler = toplamSiparisler,
+                    toplamUrunSayisi = istatistikler.Count,
+                    toplamSatilanAdet = istatistikler.Sum(x => x.toplamSatilanAdet),
+                    toplamCiro = istatistikler.Sum(x => x.toplamCiro),
+                    data = istatistikler
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = $"Satış istatistikleri alınırken hata oluştu: {ex.Message}",
+                    error = ex.ToString()
+                });
+            }
+        }
+
     }
 }

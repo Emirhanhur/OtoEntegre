@@ -41,10 +41,18 @@ export default {
         const decoded = jwtDecode(token);
 
         let roles = decoded.role;
+        if (!roles) {
+          console.warn("JWT içinde rol bulunamadı!");
+        } else if (Array.isArray(roles)) {
+          roles = roles[0];
+        }
 
         localStorage.setItem("rol", roles);
-
-        this.$router.push("/anasayfa");
+        if (roles === "Admin") {
+          this.$router.push("/admin/dashboard");
+        } else {
+          this.$router.push("/anasayfa");
+        }
       } catch (err) {
         if (err.response && err.response.status === 401) {
           this.error = "Email veya şifre yanlış!";

@@ -25,6 +25,8 @@ const routes = [
         path: '/theme',
         name: 'Theme',
         redirect: '/trendyol-entegrasyon',
+        meta: { requiresAdmin: false }
+
       },
       {
         path: '/theme/colors',
@@ -35,31 +37,50 @@ const routes = [
         path: '/trendyol-entegrasyon',
         name: 'trendyol-entegrasyon',
         component: () => import('@/views/pages/trendyol-entegrasyon/index.vue'),
+        meta: { requiresAdmin: false }
+
       },
       {
         path: '/ekstreler',
         name: 'ekstreler',
         component: () => import('@/views/pages/ekstreler/ty-index.vue'),
+        meta: { requiresAdmin: false }
+
       },
       {
         path: '/urunler',
         name: 'urunler',
         component: () => import('@/views/pages/urunler/index.vue'),
+        meta: { requiresAdmin: false }
+
+      },
+      {
+        path: '/kar-zarar',
+        name: 'kar-zarar',
+        component: () => import('@/views/pages/kar-zarar/index.vue'),
+        meta: { requiresAdmin: false }
+
       },
       {
         path: '/hepsiburada-entegrasyon',
         name: 'hepsiburada-entegrasyon',
         component: () => import('@/views/theme/platforms/hepsiburada-entegrasyon.vue'),
+        meta: { requiresAdmin: false }
+
       },
       {
         path: '/nOnBir-entegrasyon',
         name: 'nOnBir-entegrasyon',
         component: () => import('@/views/theme/platforms/nOnBir-entegrasyon.vue'),
+        meta: { requiresAdmin: false }
+
       },
       {
         path: '/ozet',
         name: 'ozet',
         component: () => import('@/views/pages/ozet/index.vue'),
+        meta: { requiresAdmin: false }
+
       },
       {
         path: '/theme/colors',
@@ -312,6 +333,42 @@ const routes = [
         path: '/admin/kredi-yukle',
         name: 'KrediYukle',
         component: () => import('@/views/pages/admin/KrediYukle.vue'),
+        meta: { requiresAdmin: true }
+      },
+      {
+        path: '/admin',
+        name: 'AdminPanel',
+        redirect: '/admin/dashboard',
+        meta: { requiresAdmin: true }
+      },
+      {
+        path: '/admin/dashboard',
+        name: 'AdminDashboard',
+        component: () => import('@/views/pages/admin/Dashboard.vue'),
+        meta: { requiresAdmin: true }
+      },
+      {
+        path: '/admin/kullanicilar',
+        name: 'AdminKullanicilar',
+        component: () => import('@/views/pages/admin/Kullanicilar.vue'),
+        meta: { requiresAdmin: true }
+      },
+      {
+        path: '/admin/krediler',
+        name: 'AdminKrediler',
+        component: () => import('@/views/pages/admin/Krediler.vue'),
+        meta: { requiresAdmin: true }
+      },
+      {
+        path: '/admin/entegrasyonlar',
+        name: 'AdminEntegrasyonlar',
+        component: () => import('@/views/pages/admin/Entegrasyonlar.vue'),
+        meta: { requiresAdmin: true }
+      },
+      {
+        path: '/admin/siparisler',
+        name: 'AdminSiparisler',
+        component: () => import('@/views/pages/admin/Siparisler.vue'),
         meta: { requiresAdmin: true }
       }
     ],

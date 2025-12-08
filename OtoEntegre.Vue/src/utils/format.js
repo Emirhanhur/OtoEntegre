@@ -1,3 +1,5 @@
+import { defineStore } from 'pinia'
+import api from '../views/axios'
 export function formatCurrency(amount, currency = 'TRY', locale = undefined) {
   const num = Number(amount || 0);
   const curr = typeof currency === 'string' && currency ? currency : 'TRY';
@@ -26,5 +28,20 @@ export function formatCurrency(amount, currency = 'TRY', locale = undefined) {
     }).format(num);
   }
 }
-
+export const useKrediStore = defineStore('kredi', {
+  state: () => ({
+    kalanKredi: 0
+  }),
+  actions: {
+    async fetchKredi() {
+      const kullaniciId = localStorage.getItem('kullanici_id')
+      if (!kullaniciId) {
+        this.kalanKredi = 0
+        return
+      }
+      const res = await api.get(`api/krediler/${kullaniciId}`)
+      this.kalanKredi = res.data.kalanKredi
+    }
+  }
+})
 

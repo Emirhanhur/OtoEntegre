@@ -221,7 +221,7 @@ namespace OtoEntegre.Api.Services
 
             while (true)
             {
-                var response = await client.GetAsync($"/api/v2/dealer/lists?pageStart={pageStart}&pageSize={pageSize}");
+                var response = await client.GetAsync($"/api/v2/dealer/lists?");
                 if (!response.IsSuccessStatusCode)
                     throw new Exception($"Dealer listesi çekilemedi (pageStart={pageStart})");
 

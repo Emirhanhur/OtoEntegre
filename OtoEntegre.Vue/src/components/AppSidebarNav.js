@@ -1,9 +1,9 @@
-import { defineComponent, h, onMounted, ref, resolveComponent } from 'vue'
+import { defineComponent, h, onMounted, ref, computed, onUnmounted, resolveComponent } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import { cilExternalLink } from '@coreui/icons'
 import { CBadge, CSidebarNav, CNavItem, CNavGroup, CNavTitle } from '@coreui/vue'
-import nav from '@/_nav.js'
+import getNavItems from '@/_nav.js'
 
 import simplebar from 'simplebar-vue'
 import 'simplebar-vue/dist/simplebar.min.css'
@@ -50,9 +50,65 @@ const AppSidebarNav = defineComponent({
   setup() {
     const route = useRoute()
     const firstRender = ref(true)
+    const navUpdateTrigger = ref(0) // localStorage değişikliklerini tetiklemek için
+    let lastBayiId = null // Son kontrol edilen bayi_id değeri
+    let lastRol = null // Son kontrol edilen rol değeri
+    let checkInterval = null // Interval referansı
+
+    // localStorage değişikliklerini dinle
+    const handleStorageChange = (e) => {
+      if (e.key === 'bayi_id' || e.key === 'rol' || e.key === null) {
+        navUpdateTrigger.value++
+      }
+    }
+
+    // Aynı sekmede localStorage değişikliklerini kontrol et
+    const checkLocalStorage = () => {
+      try {
+        const currentBayiId = localStorage.getItem('bayi_id')
+        const currentRol = localStorage.getItem('rol')
+        if (currentBayiId !== lastBayiId || currentRol !== lastRol) {
+          lastBayiId = currentBayiId
+          lastRol = currentRol
+          navUpdateTrigger.value++
+        }
+      } catch (error) {
+        // localStorage erişim hatası
+      }
+    }
 
     onMounted(() => {
       firstRender.value = false
+      // İlk bayi_id ve rol değerlerini kaydet
+      try {
+        lastBayiId = localStorage.getItem('bayi_id')
+        lastRol = localStorage.getItem('rol')
+      } catch (error) {
+        // localStorage erişim hatası
+      }
+      
+      // localStorage değişikliklerini dinle (farklı sekmeler arası)
+      window.addEventListener('storage', handleStorageChange)
+      // Aynı sekmede localStorage değişikliklerini yakalamak için custom event dinle
+      window.addEventListener('localStorageChange', handleStorageChange)
+      
+      // Aynı sekmede localStorage değişikliklerini kontrol et (500ms'de bir)
+      checkInterval = setInterval(checkLocalStorage, 500)
+    })
+
+    onUnmounted(() => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('localStorageChange', handleStorageChange)
+      if (checkInterval) {
+        clearInterval(checkInterval)
+      }
+    })
+
+    // Menüyü computed property olarak oluştur
+    const nav = computed(() => {
+      // navUpdateTrigger'ı kullanarak reactive hale getir
+      navUpdateTrigger.value
+      return getNavItems()
     })
 
     const renderItem = (item) => {
@@ -131,6 +187,7 @@ const AppSidebarNav = defineComponent({
                     as: 'div',
                     href: props.href,
                     onClick: () => props.navigate(),
+                    style: item.style || {},
                   },
                   {
                     default: () => [
@@ -206,7 +263,7 @@ const AppSidebarNav = defineComponent({
           as: simplebar,
         },
         {
-          default: () => nav.map((item) => renderItem(item)),
+          default: () => nav.value.map((item) => renderItem(item)),
         },
       )
   },

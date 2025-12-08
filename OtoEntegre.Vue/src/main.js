@@ -38,4 +38,40 @@ app.component('CIcon', CIcon)
 app.component('DocsComponents', DocsComponents)
 app.component('DocsIcons', DocsIcons)
 
+
+// Session timeout: auto-logout after 1 hour of inactivity
+const INACTIVITY_TIMEOUT = 60 * 60 * 1000; // 1 hour in milliseconds
+let inactivityTimer;
+
+const resetInactivityTimer = () => {
+	// Clear existing timer
+	if (inactivityTimer) {
+		clearTimeout(inactivityTimer);
+	}
+
+	// Only set timer if user is logged in
+	const token = localStorage.getItem('token');
+	if (!token) return;
+
+	// Set new timer
+	inactivityTimer = setTimeout(() => {
+		// Logout the user
+		localStorage.removeItem('token');
+		localStorage.removeItem('rol');
+		localStorage.removeItem('userId');
+		localStorage.removeItem('bayi_id');
+		window.location.href = '/login'; // Redirect to login
+	}, INACTIVITY_TIMEOUT);
+};
+
+// Activity events that reset the inactivity timer
+const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+
+activityEvents.forEach(event => {
+	document.addEventListener(event, resetInactivityTimer, true);
+});
+
+// Initialize timer on app load
+resetInactivityTimer();
+
 app.mount('#app')

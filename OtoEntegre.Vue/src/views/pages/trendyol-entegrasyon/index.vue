@@ -1,5 +1,5 @@
 <script>
-import { formatCurrency } from '../../../utils/format'
+import { formatCurrency, useKrediStore } from '../../../utils/format'
 import SiparisDetayModal from './siparisDetayModal.vue';
 import OtostickerLoginModal from './OtostickerLoginModal.vue';
 import { nextTick } from 'vue';
@@ -9,6 +9,10 @@ export default {
     components: {
         SiparisDetayModal,
         OtostickerLoginModal
+    },
+    setup() {
+        const krediStore = useKrediStore();
+        return { krediStore };
     },
     data() {
         return {
@@ -331,13 +335,16 @@ export default {
 
         async sendTelegram(orderId) {
             if (this.isSendingTelegram) return; // zaten gönderim varsa engelle
-
+            this.isGlobalLoading = true;
             this.isSendingTelegram = true;
             this.sendingOrderId = orderId;
             try {
 
                 const res = await api.post(`/api/entegrasyonlar/send-siparis-telegram/${orderId}`);
                 if (res.data.sent) {
+                    // Kredi bilgisini güncelle
+                    await this.krediStore.fetchKredi();
+
                     const toastEl = document.getElementById('successToast');
                     if (toastEl) {
                         const toast = new bootstrap.Toast(toastEl);
@@ -360,6 +367,7 @@ export default {
             }
             finally {
                 this.isSendingTelegram = false;
+                this.isGlobalLoading = false;
                 this.sendingOrderId = null;
             }
         },
@@ -432,6 +440,7 @@ export default {
 
             // 1. Kullanıcıya sor: Telegrama gitsin mi?
             const sendToTelegram = confirm("Oluşturulan toplu PDF Telegram'a gönderilsin mi?");
+            this.isGlobalLoading = true;   // <-- EKRAN KİLİTLENİR
 
             this.isPdfLoading = true;
             try {
@@ -448,9 +457,18 @@ export default {
                 const fileURL = URL.createObjectURL(file);
                 window.open(fileURL, '_blank');
 
+                // PDF başarıyla oluşturuldu, kredi bilgisini güncelle (her sipariş için kredi tüketilir)
+                await this.krediStore.fetchKredi();
+
                 this.isBulkSendingTelegram = true;
-                // 4. Eğer telegrama gönderildiyse kullanıcıya bilgi ver
+                // 4. Eğer telegrama gönderildiyse kullanıcıya bilgi ver ve durumu güncelle
                 if (sendToTelegram) {
+
+                    // Başarılı durumda telegramSent durumunu güncelle
+                    this.selectedOrders.forEach(id => {
+                        const order = this.orders.find(o => o.id === id);
+                        if (order) order.telegramSent = true;
+                    });
                     // İsteğe bağlı olarak toast mesajı da tetikleyebilirsin
                     const toastEl = document.getElementById('successToast');
                     if (toastEl) {
@@ -459,18 +477,37 @@ export default {
                     }
                 }
 
+                // Başarılı durumda seçimleri temizle
+                this.selectedOrders = [];
+
             } catch (err) {
-                console.error("PDF Hatası:", err);
+                console.error("Sipariş hatası:", err.response?.data);
+                alert(err.response?.data?.message || "Sipariş oluşturulamadı");
+                try {
+                    // Sunucu blob olarak hata döndürdüyse önce text'e çevir
+                    const blob = err.response.data;
+                    const text = await blob.text();
+                    const json = JSON.parse(text);
+
+                    if (json.error) {
+                        alert(json.error);
+                        // Hata durumunda seçimleri temizleme, kullanıcı tekrar deneyebilsin
+                        return;
+                    }
+                } catch (parseErr) {
+                    // JSON parse edilemedi -> gerçek mesaj yok
+                }
+
                 alert("PDF işlemi sırasında bir hata meydana geldi.");
-            } finally {
+                // Hata durumunda seçimleri temizleme, kullanıcı tekrar deneyebilsin
+            }
+
+            finally {
                 this.isPdfLoading = false;
+                this.isGlobalLoading = false;   // <-- EKRAN KİLİTİ AÇILIR
+
                 this.isBulkSendingTelegram = false;   // toplu işlem bittikten sonra kapat
                 this.sendingOrderId = null;       // tekli sipariş gönderimi için de sıfırlama
-                this.selectedOrders.forEach(id => {
-                    const order = this.orders.find(o => o.id === id);
-                    if (order) order.telegramSent = true;
-                });
-                this.selectedOrders = []
             }
         },
 
@@ -599,7 +636,8 @@ export default {
                     <tr v-for="(order) in paginatedOrders" :key="order.id" class="text-center">
 
                         <td>
-                            <input type="checkbox" :value="order.id" v-model="selectedOrders">
+                            <input v-if="!order.telegramSent" type="checkbox" :value="order.id"
+                                v-model="selectedOrders">
                         </td>
                         <td class="text-center">
                             <div v-if="order.siparisUrunleri && order.siparisUrunleri.length > 0"
@@ -713,16 +751,6 @@ export default {
                                     <span class="material-icons align-middle">autorenew</span>
                                     {{ order.originalStatus === 'PICKING' ? 'İşleme Alındı' : 'İşleme Al' }}
                                 </button>
-
-                                <!-- Tam ekran loading overlay -->
-                                <div v-if="isGlobalLoading"
-                                    class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-                                    style="z-index: 2000; background-color: rgba(220, 220, 220, 0.7);opacity: 0.05;">
-                                    <div class="text-center text-dark">
-                                        <div class="spinner-border text-success" role="status"></div>
-                                    </div>
-                                </div>
-
                             </div>
                         </td>
 
@@ -737,7 +765,7 @@ export default {
                 </tbody>
                 <tfoot v-if="paginatedOrders.length < 1">
                     <tr>
-                        <td colspan="8" class="text-center py-4 text-secondary">
+                        <td colspan="12" class="text-center py-4 text-secondary">
                             <span class="material-icons fs-1 mb-2 align-middle">inbox</span>
                             <p>{{ selectedStatus ? 'Bu durumda sipariş bulunmuyor' : 'Henüz sipariş yok' }}</p>
                         </td>
@@ -762,9 +790,28 @@ export default {
 
 
         <OtostickerLoginModal :show="showOtostickerModal" @close="showOtostickerModal = false" />
+        <div v-if="isGlobalLoading" class="global-loading-overlay">
+            <div class="spinner-border text-light" style="width: 3rem; height: 3rem;"></div>
+            <div class="mt-3 text-white fw-bold">İşlem yapılıyor...</div>
+        </div>
     </div>
 </template>
 <style>
+.global-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+    pointer-events: all;
+}
+
 /* Açık mod (varsayılan) */
 .btn-outline-primary {
     color: #1e1e1e;

@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using OtoEntegre.Api.Entities;
 using OtoEntegre.Api.Services;
 using OtoEntegre.Api.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace OtoEntegre.Api.Controllers
 {
@@ -74,6 +76,15 @@ namespace OtoEntegre.Api.Controllers
             public string? OldPassword { get; set; }
             public string? NewPassword { get; set; }
             public string? ConfirmPassword { get; set; }
+        }
+
+
+
+        [HttpPost("restore/{id}")]
+        public async Task<IActionResult> Restore(Guid id)
+        {
+            await _userService.RestoreAsync(id);
+            return NoContent();
         }
 
     }

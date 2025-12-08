@@ -1,3 +1,14 @@
+<script>
+export default {
+  props: ['show'],
+  emits: ['close'],
+  methods: {
+    close() {
+      this.$emit('close');
+    }
+  }
+};
+</script>
 <template>
   <div v-if="show" class="modal-backdrop fade show" @click.self="close">
     <div class="modal-dialog modal-xl modal-dialog-centered">
@@ -14,28 +25,22 @@
   </div>
 </template>
 
-<script>
-export default {
-  props: ['show'],
-  emits: ['close'],
-  methods: {
-    close() {
-      this.$emit('close');
-    }
-  }
-};
-</script>
+
 
 <style scoped>
 .modal-backdrop {
   position: fixed;
-  top:0; left:0; right:0; bottom:0;
-  background: rgba(0,0,0,0.5);
-  display:flex;
-  justify-content:center;
-  align-items:center;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
   z-index: 1050;
 }
+
 .modal-dialog {
   max-width: 90%;
 }

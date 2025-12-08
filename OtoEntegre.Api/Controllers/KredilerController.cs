@@ -16,6 +16,13 @@ namespace OtoEntegre.Api.Controllers
             _kredilerService = kredilerService;
         }
 
+    [HttpGet]
+    public async Task<IActionResult> GetAll()
+    {
+        var list = await _kredilerService.GetAllUserCreditsAsync();
+        return Ok(list);
+    }
+
     [HttpGet("{kullaniciId}")]
     public async Task<IActionResult> Get(Guid kullaniciId)
     {

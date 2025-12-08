@@ -3,6 +3,9 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using OtoEntegre.Api.Data;
 using OtoEntegre.Api.Entities;
+using OtoEntegre.Api.DTOs;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace OtoEntegre.Api.Services
 {
@@ -91,6 +94,57 @@ namespace OtoEntegre.Api.Services
             }
         }
 
+        // Kredi geri alma (hata durumunda kullanılır)
+        public async Task<bool> RefundOneAsync(Guid kullaniciId, Guid? performedBy = null, string? referans = null)
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                var kred = await _db.Krediler.FirstOrDefaultAsync(k => k.KullaniciId == kullaniciId);
+                if (kred == null)
+                {
+                    // Kredi kaydı yoksa oluştur ve 1 ekle
+                    kred = new Krediler
+                    {
+                        Id = Guid.NewGuid(),
+                        KullaniciId = kullaniciId,
+                        KalanKredi = 1,
+                        SonSatinAlim = DateTime.UtcNow
+                    };
+                    _db.Krediler.Add(kred);
+                }
+                else
+                {
+                    // Kredi geri ekle
+                    kred.KalanKredi += 1;
+                    kred.SonSatinAlim = DateTime.UtcNow;
+                    _db.Krediler.Update(kred);
+                }
+
+                var islemi = new KrediIslemleri
+                {
+                    Id = Guid.NewGuid(),
+                    KullaniciId = kullaniciId,
+                    Miktar = 1,
+                    Tip = "İade Edildi",
+                    BalanceAfter = kred.KalanKredi,
+                    Referans = referans,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = performedBy
+                };
+                _db.KrediIslemleri.Add(islemi);
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+                return true;
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
         // Kredi ekleme (satın alma / admin)
         public async Task<Krediler> AddCreditsAsync(Guid kullaniciId, int amount, Guid? performedBy = null, string? referans = null, string tip = "Yüklendi")
         {
@@ -141,6 +195,24 @@ namespace OtoEntegre.Api.Services
                 await tx.RollbackAsync();
                 throw;
             }
+        }
+
+        public async Task<IEnumerable<KrediSummaryDto>> GetAllUserCreditsAsync()
+        {
+            // Left join Kullanicilar with Krediler
+            var query = from u in _db.Kullanicilar
+                        join k in _db.Krediler on u.Id equals k.KullaniciId into g
+                        from kred in g.DefaultIfEmpty()
+                        select new KrediSummaryDto
+                        {
+                            KullaniciId = u.Id,
+                            Ad = u.Ad,
+                            Email = u.Email,
+                            KalanKredi = kred != null ? kred.KalanKredi : 0,
+                            SonSatinAlim = kred != null ? kred.SonSatinAlim : null
+                        };
+
+            return await query.ToListAsync();
         }
     }
 }
